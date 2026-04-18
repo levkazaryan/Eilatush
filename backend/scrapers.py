@@ -388,45 +388,126 @@ YNET_RSS_CANDIDATES = [
 
 
 async def scrape_ynet_eilat(client: httpx.AsyncClient) -> List[Dict[str, Any]]:
-    """Ynet — filter for Eilat-related content."""
-    out: List[Dict[str, Any]] = []
+    """Ynet — scrape the Eilat topic page (requires stealth browser)."""
     topic_url = "https://www.ynet.co.il/topics/%D7%90%D7%99%D7%9C%D7%AA"
-    # Try stealth browser first — Ynet topic pages sometimes block httpx
-    html = await _pw_fetch(topic_url) or await _fetch(client, topic_url)
-    if html:
-        soup = BeautifulSoup(html, "lxml")
-        seen = set()
-        for a in soup.find_all("a", href=True):
-            href = a["href"]
-            if "/article/" not in href:
-                continue
-            full = urljoin("https://www.ynet.co.il", href)
-            if full in seen:
-                continue
-            seen.add(full)
-            title = _strip(a.get_text())
-            if len(title) < 10:
-                continue
-            if not _contains_eilat(title):
-                parent_text = _strip(a.parent.get_text() if a.parent else "")
-                if not _contains_eilat(parent_text):
-                    continue
-            img_tag = a.find("img")
-            img = img_tag.get("src") if img_tag else None
-            out.append(
-                _make_article(
-                    title=title,
-                    summary=title,
-                    content_html=f'<p>{title}</p><p><a href="{full}">קרא את הכתבה המלאה ב-Ynet</a></p>',
-                    image=img,
-                    source_name="Ynet",
-                    source_url=full,
-                    published_at=datetime.now(timezone.utc),
-                    source_type="news",
-                )
-            )
-            if len(out) >= 30:
+    html = await _pw_fetch(topic_url)
+    if not html:
+        html = await _fetch(client, topic_url)
+    if not html:
+        return []
+    soup = BeautifulSoup(html, "lxml")
+    out: List[Dict[str, Any]] = []
+    seen = set()
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        if "/article/" not in href:
+            continue
+        full = urljoin("https://www.ynet.co.il", href)
+        if full in seen:
+            continue
+        # Walk up the DOM to find the article title context
+        context = _strip(a.get_text())
+        node = a
+        for _ in range(6):
+            if node is None:
                 break
+            t = _strip(node.get_text())
+            if len(t) > len(context):
+                context = t
+            node = node.parent
+        if len(context) < 10:
+            continue
+        if not _contains_eilat(context):
+            continue
+        # Best title candidate
+        title = ""
+        for tag_name in ("h2", "h3", "h1"):
+            el = a.find(tag_name) or (a.parent.find(tag_name) if a.parent else None)
+            if el:
+                tt = _strip(el.get_text())
+                if tt:
+                    title = tt
+                    break
+        if not title:
+            title = context[:150]
+        if len(title) < 8:
+            continue
+        img_tag = a.find("img")
+        img = img_tag.get("src") if img_tag else None
+        if img and img.startswith("//"):
+            img = "https:" + img
+        seen.add(full)
+        out.append(
+            _make_article(
+                title=title,
+                summary=context[:300],
+                content_html=f'<p>{title}</p><p><a href="{full}">קרא את הכתבה המלאה ב-Ynet</a></p>',
+                image=img,
+                source_name="Ynet",
+                source_url=full,
+                published_at=datetime.now(timezone.utc),
+                source_type="news",
+            )
+        )
+        if len(out) >= 25:
+            break
+    return out
+
+
+async def scrape_kan_eilat(client: httpx.AsyncClient) -> List[Dict[str, Any]]:
+    """Kan — Eilat tag page (requires stealth browser)."""
+    tag_url = "https://www.kan.org.il/tags/generaltags/%D7%90%D7%99%D7%9C%D7%AA/"
+    html = await _pw_fetch(tag_url)
+    if not html:
+        return []
+    soup = BeautifulSoup(html, "lxml")
+    out: List[Dict[str, Any]] = []
+    seen = set()
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        full = urljoin("https://www.kan.org.il", href)
+        # Kan article URLs live under /content/kan-news/
+        if "/content/kan-news/" not in full:
+            continue
+        if full in seen:
+            continue
+        title = _strip(a.get_text())
+        if len(title) < 10:
+            continue
+        # walk up to enrich context if needed
+        if not _contains_eilat(title):
+            node = a
+            ctx = title
+            for _ in range(4):
+                if node is None:
+                    break
+                t = _strip(node.get_text())
+                if len(t) > len(ctx):
+                    ctx = t
+                node = node.parent
+            if not _contains_eilat(ctx):
+                # Since we're on the Eilat tag page, treat listed links as Eilat-related
+                # even without explicit keyword in title, but prefer ones we're sure about
+                pass
+        img_tag = a.find("img")
+        img = img_tag.get("src") if img_tag else None
+        if img and img.startswith("//"):
+            img = "https:" + img
+        seen.add(full)
+        out.append(
+            _make_article(
+                title=title,
+                summary=title,
+                content_html=f'<p>{title}</p><p><a href="{full}">קרא/צפה בכתבה המלאה בכאן חדשות</a></p>',
+                image=img,
+                source_name="כאן חדשות",
+                source_url=full,
+                published_at=datetime.now(timezone.utc),
+                source_type="news",
+            )
+        )
+        if len(out) >= 25:
+            break
     return out
 
 
@@ -764,6 +845,7 @@ SCRAPERS = [
     ("smarticket_events", scrape_smarticket),
     ("ynet_eilat", scrape_ynet_eilat),
     ("mako_eilat", scrape_mako_eilat),
+    ("kan_eilat", scrape_kan_eilat),
     ("facebook_eilat_muni", scrape_facebook_eilat_muni),
 ]
 
@@ -778,16 +860,10 @@ FULL_SITE_SOURCES = [
     ("https://eilatport.co.il/", "נמל אילת", "news", None, 40, False, False),
     ("https://icemalleilat.co.il/", "אייס מול אילת", "event", None, 40, False, False),
     ("https://biz.eilat.muni.il/", "עסקים — עיריית אילת", "news", None, 40, False, False),
-    # General / national domains — filter by Eilat keyword
-    ("https://www.ynet.co.il/", "Ynet", "news", None, 40, True, False),
-    ("https://mobile.mako.co.il/", "Mako", "news", None, 40, True, False),
+    # יום יום (regional)
     ("https://www.yomyom.net/", "יום יום", "news", None, 40, True, False),
-    ("https://www.sba.org.il/", "הסוכנות לעסקים קטנים", "news", None, 25, True, False),
-    ("https://www.parks.org.il/", "רשות הטבע והגנים", "news", None, 25, True, False),
-    # Sites that block httpx/bots — use headless browser (Playwright)
-    ("https://www.kan.org.il/", "כאן חדשות", "news", None, 25, True, True),
-    ("https://www.tiuli.com/", "טיולי", "news", None, 25, True, True),
-    ("https://www.gov.il/", "ממשל ישראל", "news", None, 25, True, True),
+    # Ynet / Mako / Kan: handled by dedicated topic/tag scrapers (SCRAPERS list)
+    # Tiuli, SBA, Parks, Gov.il: deactivated per user (low value vs. effort)
 ]
 
 LISTING_FILTERED_SOURCES: List = []  # merged into FULL_SITE_SOURCES above
