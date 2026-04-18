@@ -481,8 +481,10 @@ async def scrape_site_articles(
     require_eilat_keyword: bool = False,
 ) -> List[Dict[str, Any]]:
     """Scan a site's homepage, discover article links, fetch each and extract title/content.
-    Only follow links on the same domain. When require_eilat_keyword=True, keep only
-    articles whose title/content mentions Eilat (for sites that are not Eilat-only).
+    Only follow links on the same domain. When require_eilat_keyword=True, pre-filters
+    links whose anchor text or parent context mentions Eilat (faster, more accurate
+    than fetching every article on a large national site like ynet/mako/gov.il).
+    Also post-filters each fetched article by Eilat keyword.
     """
     html = await _fetch(client, base_url)
     if not html:
@@ -505,8 +507,6 @@ async def scrape_site_articles(
             continue
         if full in seen:
             continue
-        # must look like an article/content link — either match known patterns
-        # or have a "deep" path (>= 2 segments) which is a good heuristic
         path = urlparse(full).path
         if patterns:
             if not any(p.search(full) for p in patterns):
@@ -515,12 +515,22 @@ async def scrape_site_articles(
             segs = [s for s in path.split("/") if s]
             if len(segs) < 1:
                 continue
-            # skip obvious non-content
             if any(bad in path.lower() for bad in [
                 "/tag/", "/category/", "/author/", "/search", "/login", "/register",
                 "/wp-admin", "/wp-login", "/contact", "/about", "/privacy", "/terms",
                 "/cart", "/checkout", "/account", ".pdf", ".jpg", ".png", ".gif", ".xml",
             ]):
+                continue
+        # Eilat keyword pre-filter: check anchor text + parent context
+        if require_eilat_keyword:
+            anchor_text = _strip(a.get_text())
+            parent_text = _strip(a.parent.get_text() if a.parent else "")
+            url_text = full  # Eilat might be in the URL slug
+            if not (
+                _contains_eilat(anchor_text)
+                or _contains_eilat(parent_text)
+                or _contains_eilat(url_text)
+            ):
                 continue
         seen.add(full)
         candidates.append(full)
@@ -533,7 +543,7 @@ async def scrape_site_articles(
         if not art:
             continue
         asoup = BeautifulSoup(art, "lxml")
-        # title: og:title > article h1 > document title
+        # title
         title = ""
         og_t = asoup.find("meta", property="og:title")
         if og_t and og_t.get("content"):
@@ -561,7 +571,7 @@ async def scrape_site_articles(
         if og_img and og_img.get("content"):
             hero = urljoin(url, og_img["content"])
 
-        # body: article/main/content div
+        # body
         main = (
             asoup.find("article")
             or asoup.find("main")
@@ -575,12 +585,11 @@ async def scrape_site_articles(
             content_html = str(main)[:20000]
             body_text = _strip(main.get_text())[:800]
 
-        # optional Eilat keyword filter
+        # post-filter by Eilat keyword
         if require_eilat_keyword:
             if not _contains_eilat(title + " " + summary + " " + body_text):
                 continue
 
-        # optional date
         pub = datetime.now(timezone.utc)
         t = asoup.find("time")
         if t:
@@ -630,35 +639,28 @@ SCRAPERS = [
 ]
 
 
-SINGLE_PAGE_SOURCES = [
-    # These URLs are specific deep-link pages (one article each) — keep as single-page
-    ("https://www.tiuli.com/articles/1925/-329", "טיולי", "news"),
-    ("https://www.gov.il/he/pages/information-eilat-development", "ממשל ישראל — פיתוח אילת", "news"),
-    (
-        "https://www.sba.org.il/hb/MaofServices/courses/Pages/Eilat/ye-13-09-23.aspx",
-        "הסוכנות לעסקים קטנים — אילת",
-        "news",
-    ),
-    (
-        "https://www.kan.org.il/content/kan-news/newstv/p-963853/s1/1020596/",
-        "כאן חדשות",
-        "news",
-    ),
-]
+SINGLE_PAGE_SOURCES: List = []  # not used any longer — all sources are full-site
 
-# Full sites — scrape homepage + follow all article links on the same domain
+# Full sites — scrape homepage + follow article links.
+# Format: (base_url, source_name, source_type, link_patterns, max_items, require_eilat_keyword)
 FULL_SITE_SOURCES = [
-    # (base_url, source_name, source_type, link_patterns, max_items, require_eilat_keyword)
-    ("https://eilat.city/", "אילת סיטי", "news", None, 20, False),
-    ("https://eilatport.co.il/", "נמל אילת", "news", None, 15, False),
+    # Eilat-only domains → no keyword filter (everything IS Eilat)
+    ("https://eilat.city/", "אילת סיטי", "news", None, 25, False),
+    ("https://eilatport.co.il/", "נמל אילת", "news", None, 20, False),
     ("https://icemalleilat.co.il/", "אייס מול אילת", "event", None, 20, False),
     ("https://biz.eilat.muni.il/", "עסקים — עיריית אילת", "news", None, 20, False),
+    # General / national domains → require Eilat keyword in link/context/body
+    ("https://www.ynet.co.il/", "Ynet", "news", None, 20, True),
+    ("https://mobile.mako.co.il/", "Mako", "news", None, 20, True),
+    ("https://www.kan.org.il/", "כאן חדשות", "news", None, 15, True),
+    ("https://www.tiuli.com/", "טיולי", "news", None, 15, True),
+    ("https://www.gov.il/", "ממשל ישראל", "news", None, 10, True),
+    ("https://www.sba.org.il/", "הסוכנות לעסקים קטנים", "news", None, 10, True),
+    ("https://www.parks.org.il/", "רשות הטבע והגנים", "news", None, 10, True),
+    ("https://www.yomyom.net/", "יום יום", "news", None, 15, True),
 ]
 
-LISTING_FILTERED_SOURCES = [
-    ("https://www.parks.org.il/", "רשות הטבע והגנים", r""),
-    ("https://www.yomyom.net/", "יום יום", r""),
-]
+LISTING_FILTERED_SOURCES: List = []  # merged into FULL_SITE_SOURCES above
 
 
 async def run_all_scrapers() -> List[Dict[str, Any]]:
