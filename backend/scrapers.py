@@ -129,7 +129,7 @@ async def _article_date(client: httpx.AsyncClient, url: str, use_browser: bool =
 
 
 async def _article_meta(client: httpx.AsyncClient, url: str, use_browser: bool = False) -> Dict[str, Any]:
-    """Fetch article URL and return dict with {date, title, image}."""
+    """Fetch article URL and return dict with {date, title, image, summary, body_head}."""
     html = await _fetch_smart(client, url, use_browser=use_browser)
     if not html:
         return {}
@@ -150,6 +150,17 @@ async def _article_meta(client: httpx.AsyncClient, url: str, use_browser: bool =
         )
         if og_d and og_d.get("content"):
             out["summary"] = _strip(og_d["content"])[:400]
+        # body head (first 500 chars) — used for topic-relevance checks
+        main = (
+            soup.find("article")
+            or soup.find("main")
+            or soup.find("div", class_=re.compile("content|article|post|main", re.I))
+        )
+        if main:
+            for bad in main.find_all(["script", "style", "nav", "aside", "footer", "header", "form"]):
+                bad.decompose()
+            body_text = _strip(main.get_text())
+            out["body_head"] = body_text[:800]
         return out
     except Exception:
         return {}
@@ -179,8 +190,7 @@ async def _enrich_dates(client: httpx.AsyncClient, articles: List[Dict[str, Any]
         needs_date = not a.get("published_at")
         needs_title = _title_looks_bad(a.get("title", ""))
         needs_image = not a.get("image")
-        if not (needs_date or needs_title or needs_image):
-            return
+        # always fetch so we can populate _body_head for off-topic filter
         async with sem:
             try:
                 meta = await _article_meta(client, a["source_url"], use_browser=False)
@@ -194,6 +204,8 @@ async def _enrich_dates(client: httpx.AsyncClient, articles: List[Dict[str, Any]
                     a["image"] = meta["image"]
                 if meta.get("summary") and (not a.get("summary") or len(a.get("summary", "")) < 30):
                     a["summary"] = meta["summary"]
+                if meta.get("body_head"):
+                    a["_body_head"] = meta["body_head"]
             except Exception:
                 pass
 
@@ -741,10 +753,26 @@ async def _scrape_tag_page(
         if len(out) >= max_items:
             break
     await _enrich_dates(client, out, use_browser=enrich_use_browser, concurrency=4)
-    # Post-enrichment: drop any item whose final title (after og:title replace)
-    # is a static/boilerplate page such as "תנאי שימוש" / "מדיניות פרטיות".
-    out = [a for a in out if not _is_boilerplate(a.get("title", ""))]
-    return out
+    # Post-enrichment filters:
+    # 1) Drop boilerplate pages (Terms/Privacy/Newsletter landing)
+    # 2) Drop off-topic articles — articles where "אילת" is NOT in the title,
+    #    og:description (summary) or the first ~500 chars of body. These are
+    #    usually sidebar/related-articles that happen to mention Eilat in a
+    #    tangential sub-section.
+    kept: List[Dict[str, Any]] = []
+    for a in out:
+        if _is_boilerplate(a.get("title", "")):
+            continue
+        title = a.get("title", "") or ""
+        summary = a.get("summary", "") or ""
+        body_head = a.get("_body_head", "") or ""
+        hay = title + " " + summary + " " + body_head[:500]
+        if not _contains_eilat(hay):
+            log.info("dropping off-topic %s: %s", source_name, title[:60])
+            continue
+        a.pop("_body_head", None)  # strip internal field
+        kept.append(a)
+    return kept
 
 
 async def scrape_israelhayom_eilat(client: httpx.AsyncClient) -> List[Dict[str, Any]]:
