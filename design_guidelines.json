@@ -1,0 +1,88 @@
+{
+  "theme": "Dark",
+  "archetype": "5 (Jewel & Luxury) with Electric/Neon touches (Nightlife focus)",
+  "color_palette": {
+    "background": {
+      "default": "#0C0C12",
+      "surface": "#14141E",
+      "card": "#1A1A27"
+    },
+    "primary": {
+      "default": "#FF512F",
+      "hover": "#FF715B",
+      "description": "Electric Sunset Orange - Used for NOW actions, urgent jobs, high-priority Eilatush AI buttons."
+    },
+    "secondary": {
+      "default": "#00F2FE",
+      "description": "Red Sea Cyan - Calm, informative actions, secondary badges."
+    },
+    "text": {
+      "primary": "#F8F9FA",
+      "secondary": "#A1A1AA",
+      "muted": "#71717A"
+    },
+    "borders": {
+      "default": "rgba(255, 255, 255, 0.08)",
+      "focus": "rgba(255, 81, 47, 0.5)"
+    }
+  },
+  "typography": {
+    "primary_font": "Heebo",
+    "secondary_font": "Assistant",
+    "rtl_rules": "Always use logical CSS properties (ps-*, pe-*, ms-*, me-*, text-start, text-end, rounded-s-*, rounded-e-*). Add dir='rtl' to the main HTML or wrapper.",
+    "scale": {
+      "h1": "text-4xl tracking-tighter font-black",
+      "h2": "text-2xl tracking-tight font-black",
+      "h3": "text-xl font-bold",
+      "body": "text-base font-normal",
+      "small": "text-sm font-medium",
+      "tiny": "text-xs tracking-[0.1em] uppercase"
+    }
+  },
+  "spacing_and_layout": {
+    "philosophy": "Mobile-first, generous padding. Minimum p-4 on standard containers, p-6 on major cards. Logical RTL values mandatory.",
+    "grid": "Bento style for AI cards, vertical lists for events. Full width bleed for Hero sections."
+  },
+  "motion_and_interaction": {
+    "hover_state": "Slight scale (-translate-y-1) and brightness increase. Explicit text colors on hover.",
+    "active_state": "Scale down (scale-95) for tactile feel.",
+    "animations": "Use Framer Motion for smooth card entrances. Eilatush AI chat should fade and slide up."
+  },
+  "components": {
+    "bottom_tab_nav": "Glassmorphism: backdrop-blur-xl bg-[#0C0C12]/80 border-t border-white/10. Active icon is Sunset Orange (#FF512F).",
+    "event_card": "Dark card (#1A1A27) with a 1px border. Image on top, dense info below. RTL alignment: Time on the right (start), title on the right, badges on the left (end). Use Tracing Beam effect for 'NOW' events.",
+    "business_card": "Horizontal layout. Image right (start), text left (end). 'Open Now' pulsing dot in Red Sea Cyan (#00F2FE). WhatsApp CTA in solid green or Sunset Orange.",
+    "job_card": "Minimalist bento item. Sharp 1px border. High contrast 'START NOW' badge.",
+    "news_card": "List item with thin separator. Monochromatic text. 'Source' badge in muted outline.",
+    "eilatush_ai": "Chat interface. User message aligned left (end in RTL). AI Mascot (Clownfish) aligned right (start in RTL). AI responses must be rendered as interactive bento cards, not plain text bubbles."
+  },
+  "media_assets": {
+    "mascot": {
+      "url": "https://images.unsplash.com/photo-1696479079717-8ddf8e3443b7?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1MDZ8MHwxfHNlYXJjaHwxfHxjbG93bmZpc2glMjBkYXJrJTIwYmFja2dyb3VuZHxlbnwwfHx8fDE3NzY1MTgwMzJ8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Eilatush the Clownfish. Dark neon mascot for the AI assistant."
+    },
+    "hero_nightlife": {
+      "url": "https://images.unsplash.com/photo-1578626574897-2e9c35e1ea29?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzh8MHwxfHNlYXJjaHwxfHxuaWdodGxpZmUlMjBkZXNlcnQlMjBkYXJrJTIwbW9vZHxlbnwwfHx8fDE3NzY1MTgwMjN8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Desert night vibe, dark mood for Eilat events home header."
+    },
+    "event_concert": {
+      "url": "https://images.unsplash.com/photo-1740432276173-7a0e546e26cf?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MjJ8MHwxfHNlYXJjaHwxfHxjb25jZXJ0JTIwc3RhZ2UlMjBuaWdodCUyMGRhcmt8ZW58MHx8fHwxNzc2NTE4MDIzfDA&ixlib=rb-4.1.0&q=85",
+      "description": "Concert/Party card background asset."
+    },
+    "event_food": {
+      "url": "https://images.unsplash.com/photo-1549366970-6b64335a55cb?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzV8MHwxfHNlYXJjaHwxfHxzdHJlZXQlMjBmb29kJTIwbmlnaHQlMjBkYXJrfGVufDB8fHx8MTc3NjUxODAyM3ww&ixlib=rb-4.1.0&q=85",
+      "description": "Street food / Local dining card background asset."
+    }
+  },
+  "testing": {
+    "requirements": "All interactive elements MUST have data-testid attributes (e.g., data-testid='event-card-1', data-testid='nav-eilatush-bot')."
+  },
+  "instructions_to_main_agent": [
+    "You are building for RTL. You MUST set <html dir='rtl'>.",
+    "DO NOT use pr-, pl-, ml-, mr-. Use logical properties exclusively: ps-*, pe-*, ms-*, me-*.",
+    "Never use text-left or text-right. Use text-start and text-end.",
+    "For absolute positioning, use start-* and end-* instead of left-* and right-*.",
+    "Icons with direction (e.g. back arrows) must be mirrored (scale-x-[-1]) in RTL mode.",
+    "Do not use transparent headers. Apply backdrop-blur-xl bg-[#0C0C12]/80 to sticky top navigation and bottom tabs."
+  ]
+}
