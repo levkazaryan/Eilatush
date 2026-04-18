@@ -62,7 +62,12 @@ export default function TabsLayout() {
               <View style={[styles.centerBubble, focused && styles.centerBubbleActive]}>
                 <Ionicons name="sparkles" size={24} color="#fff" />
               </View>
-              <Text style={[styles.tabLabel, { color: focused ? COLORS.primary : COLORS.textMuted, marginTop: 2 }]}>אילתוש</Text>
+              <Text
+                numberOfLines={1}
+                style={[styles.tabLabel, styles.centerLabel, { color: focused ? COLORS.primary : COLORS.textMuted }]}
+              >
+                אילתוש
+              </Text>
             </View>
           ),
         }}
@@ -105,6 +110,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginTop: -16,
+    minWidth: 80,   // ensure label never wraps regardless of parent width
+  },
+  centerLabel: {
+    marginTop: 2,
+    paddingHorizontal: 4,
+    includeFontPadding: false as any,
   },
   centerBubble: {
     width: 52,
