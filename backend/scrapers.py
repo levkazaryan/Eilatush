@@ -559,6 +559,76 @@ async def scrape_kan_eilat(client: httpx.AsyncClient) -> List[Dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# Israel Hayom — Eilat tag
+# ---------------------------------------------------------------------------
+
+async def scrape_israelhayom_eilat(client: httpx.AsyncClient) -> List[Dict[str, Any]]:
+    """Israel Hayom — scrape Eilat tag listing."""
+    url = "https://www.israelhayom.co.il/tag/%D7%90%D7%99%D7%9C%D7%AA"
+    html = await _fetch(client, url)
+    if not html:
+        html = await _pw_fetch(url)
+    if not html:
+        return []
+    soup = BeautifulSoup(html, "lxml")
+    out: List[Dict[str, Any]] = []
+    seen = set()
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        if "/article/" not in href:
+            continue
+        full = urljoin("https://www.israelhayom.co.il", href)
+        # keep only article URLs under israelhayom.co.il
+        if "israelhayom.co.il" not in full:
+            continue
+        if full in seen:
+            continue
+        # Walk up to gather a meaningful title (anchor text can be empty/image)
+        context = _strip(a.get_text())
+        title = context
+        node = a
+        for _ in range(5):
+            if node is None:
+                break
+            t = _strip(node.get_text())
+            if len(t) > len(title):
+                title = t
+            node = node.parent
+        if not title or len(title) < 8:
+            continue
+        # Prefer h1/h2/h3 within anchor's context
+        for tag_name in ("h2", "h3", "h1"):
+            el = a.find(tag_name) or (a.parent.find(tag_name) if a.parent else None)
+            if el:
+                tt = _strip(el.get_text())
+                if tt and len(tt) >= 8:
+                    title = tt
+                    break
+        img_tag = a.find("img")
+        img = img_tag.get("src") if img_tag else None
+        if img and img.startswith("//"):
+            img = "https:" + img
+        seen.add(full)
+        out.append(
+            _make_article(
+                title=title[:250],
+                summary=context[:300],
+                content_html=f'<p>{title}</p><p><a href="{full}">קרא את הכתבה המלאה בישראל היום</a></p>',
+                image=img,
+                source_name="ישראל היום",
+                source_url=full,
+                published_at=None,
+                source_type="news",
+            )
+        )
+        if len(out) >= 25:
+            break
+    # Enrich with real publish dates
+    await _enrich_dates(client, out, use_browser=False, concurrency=5)
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Mako — Eilat tag
 # ---------------------------------------------------------------------------
 
@@ -894,6 +964,7 @@ SCRAPERS = [
     ("ynet_eilat", scrape_ynet_eilat),
     ("mako_eilat", scrape_mako_eilat),
     ("kan_eilat", scrape_kan_eilat),
+    ("israelhayom_eilat", scrape_israelhayom_eilat),
     ("facebook_eilat_muni", scrape_facebook_eilat_muni),
 ]
 
