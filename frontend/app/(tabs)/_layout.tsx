@@ -1,0 +1,127 @@
+import React from "react";
+import { Tabs } from "expo-router";
+import { View, Text, StyleSheet, Platform } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { COLORS } from "../../theme";
+
+type IconName = React.ComponentProps<typeof Ionicons>["name"];
+
+function TabIcon({ focused, name, label, testID }: { focused: boolean; name: IconName; label: string; testID: string }) {
+  return (
+    <View style={styles.tabItem} testID={testID}>
+      <Ionicons name={name} size={22} color={focused ? COLORS.primary : COLORS.textMuted} />
+      <Text style={[styles.tabLabel, { color: focused ? COLORS.primary : COLORS.textMuted }]} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+export default function TabsLayout() {
+  return (
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarShowLabel: false,
+        tabBarStyle: {
+          backgroundColor: "rgba(12,12,18,0.92)",
+          borderTopColor: COLORS.border,
+          borderTopWidth: 1,
+          height: Platform.OS === "web" ? 68 : 78,
+          paddingTop: 8,
+          paddingBottom: Platform.OS === "web" ? 8 : 18,
+        },
+        tabBarActiveTintColor: COLORS.primary,
+        tabBarInactiveTintColor: COLORS.textMuted,
+      }}
+    >
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: "בית",
+          tabBarIcon: ({ focused }) => (
+            <TabIcon focused={focused} name={focused ? "flame" : "flame-outline"} label="עכשיו" testID="tab-home" />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="businesses"
+        options={{
+          title: "עסקים",
+          tabBarIcon: ({ focused }) => (
+            <TabIcon focused={focused} name={focused ? "storefront" : "storefront-outline"} label="עסקים" testID="tab-businesses" />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="eilatush"
+        options={{
+          title: "אילתוש",
+          tabBarIcon: ({ focused }) => (
+            <View style={styles.centerItem} testID="tab-eilatush">
+              <View style={[styles.centerBubble, focused && styles.centerBubbleActive]}>
+                <Ionicons name="sparkles" size={24} color="#fff" />
+              </View>
+              <Text style={[styles.tabLabel, { color: focused ? COLORS.primary : COLORS.textMuted, marginTop: 2 }]}>אילתוש</Text>
+            </View>
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="jobs"
+        options={{
+          title: "עבודה",
+          tabBarIcon: ({ focused }) => (
+            <TabIcon focused={focused} name={focused ? "briefcase" : "briefcase-outline"} label="עבודה" testID="tab-jobs" />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="news"
+        options={{
+          title: "חדשות",
+          tabBarIcon: ({ focused }) => (
+            <TabIcon focused={focused} name={focused ? "newspaper" : "newspaper-outline"} label="חדשות" testID="tab-news" />
+          ),
+        }}
+      />
+    </Tabs>
+  );
+}
+
+const styles = StyleSheet.create({
+  tabItem: {
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 56,
+  },
+  tabLabel: {
+    fontSize: 11,
+    marginTop: 2,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  centerItem: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: -16,
+  },
+  centerBubble: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: COLORS.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.6,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+    borderWidth: 3,
+    borderColor: COLORS.bg,
+  },
+  centerBubbleActive: {
+    backgroundColor: COLORS.primaryHover,
+  },
+});
