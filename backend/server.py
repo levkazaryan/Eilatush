@@ -177,17 +177,38 @@ async def get_jobs(urgency: Optional[str] = None, category: Optional[str] = None
     return docs
 
 @api_router.get("/news")
-async def get_news(source: Optional[str] = None):
+async def get_news(source: Optional[str] = None, source_name: Optional[str] = None):
     query: Dict[str, Any] = {}
     if source:
-        # source filter now maps to source_type (news/alert/event)
         query["source_type"] = source
+    if source_name:
+        query["source_name"] = source_name
     docs = await db.news.find(query, {"_id": 0}).to_list(500)
-    docs.sort(key=lambda d: d.get("published_at") or d.get("fetched_at") or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    # Sort: articles with a real published_at first (newest → oldest),
+    # then articles without a date at the end (by fetched_at desc).
+    def _key(d):
+        p = d.get("published_at")
+        f = d.get("fetched_at") or datetime.min.replace(tzinfo=timezone.utc)
+        if p is None:
+            return (1, -f.timestamp() if isinstance(f, datetime) else 0)
+        return (0, -p.timestamp() if isinstance(p, datetime) else 0)
+    docs.sort(key=_key)
     # strip heavy content_html from list response
     for d in docs:
         d.pop("content_html", None)
     return docs
+
+
+@api_router.get("/news/sources")
+async def get_news_sources():
+    """Return list of distinct source_name values present in the news collection, with counts."""
+    pipeline = [
+        {"$match": {"source_name": {"$exists": True, "$ne": None}}},
+        {"$group": {"_id": "$source_name", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+    ]
+    docs = await db.news.aggregate(pipeline).to_list(100)
+    return [{"source_name": d["_id"], "count": d["count"]} for d in docs]
 
 
 @api_router.get("/news/{article_id}")

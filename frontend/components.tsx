@@ -308,7 +308,7 @@ export function NewsCard({ item, onPress, onSourcePress }: { item: NewsT; onPres
               {srcLabel}
             </Text>
           </Pressable>
-          <Text style={styles.newsDate}>{formatHebrewTime(item.published_at)}</Text>
+          <Text style={styles.newsDate}>{item.published_at ? formatHebrewTime(item.published_at) : ""}</Text>
         </View>
         <Text style={styles.newsTitle}>{item.title}</Text>
         <Text style={styles.newsSummary} numberOfLines={3}>

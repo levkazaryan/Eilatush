@@ -26,10 +26,15 @@ export const api = {
     const r = await fetch(`${API}/api/jobs?${qs.toString()}`);
     return r.json();
   },
-  async news(params: { source?: string } = {}) {
+  async news(params: { source?: string; source_name?: string } = {}) {
     const qs = new URLSearchParams();
     if (params.source) qs.set("source", params.source);
+    if (params.source_name) qs.set("source_name", params.source_name);
     const r = await fetch(`${API}/api/news?${qs.toString()}`);
+    return r.json();
+  },
+  async newsSources() {
+    const r = await fetch(`${API}/api/news/sources`);
     return r.json();
   },
   async chat(message: string, session_id?: string) {
@@ -61,21 +66,47 @@ export const openLink = (url?: string) => {
   Linking.openURL(url).catch(() => {});
 };
 
-export const formatHebrewTime = (iso: string): string => {
+export const formatHebrewTime = (iso?: string | null): string => {
+  if (!iso) return "";
   const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
   const now = new Date();
-  const diffMin = Math.round((d.getTime() - now.getTime()) / 60000);
-  if (diffMin >= -60 && diffMin <= 60) return "עכשיו";
-  if (diffMin < 0 && diffMin > -1440) return "היום";
-  const sameDay = d.toDateString() === now.toDateString();
-  if (sameDay) {
-    return `היום ${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
+  const diffMs = d.getTime() - now.getTime();
+  const diffMinAbs = Math.abs(diffMs) / 60000;
+  const diffHrAbs = diffMinAbs / 60;
+  const diffDayAbs = diffHrAbs / 24;
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  const hhmm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+  // Future (events): keep "עכשיו / היום HH:MM / מחר HH:MM / date"
+  if (diffMs >= 0) {
+    if (diffMinAbs < 60) return "עכשיו";
+    const sameDay = d.toDateString() === now.toDateString();
+    if (sameDay) return `היום ${hhmm}`;
+    const tomorrow = new Date(now.getTime() + 86400000);
+    if (d.toDateString() === tomorrow.toDateString()) return `מחר ${hhmm}`;
+    return d.toLocaleString("he-IL", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
   }
-  const tomorrow = new Date(now.getTime() + 86400000);
-  if (d.toDateString() === tomorrow.toDateString()) {
-    return `מחר ${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
+
+  // Past (news): relative for <1d, else actual date
+  if (diffMinAbs < 60) {
+    const m = Math.max(1, Math.round(diffMinAbs));
+    return `לפני ${m} דק׳`;
   }
-  return d.toLocaleString("he-IL", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  if (diffHrAbs < 24) {
+    const h = Math.max(1, Math.round(diffHrAbs));
+    if (h === 1) return `לפני שעה`;
+    if (h === 2) return `לפני שעתיים`;
+    return `לפני ${h} שעות`;
+  }
+  if (diffDayAbs < 7) {
+    const days = Math.floor(diffDayAbs);
+    if (days === 1) return `אתמול`;
+    if (days === 2) return `לפני יומיים`;
+    return `לפני ${days} ימים`;
+  }
+  // older — show full date (dd/mm/yy)
+  return d.toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit", year: "2-digit" });
 };
 
 export const formatJobPosted = (iso: string): string => {

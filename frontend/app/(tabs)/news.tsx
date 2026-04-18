@@ -6,23 +6,39 @@ import { api, openLink } from "../../api";
 import { COLORS, SPACING } from "../../theme";
 import { NewsCard, NewsT, FilterChip, EmptyState } from "../../components";
 
-const SOURCES: { key: string; label: string }[] = [
+const TYPES: { key: string; label: string }[] = [
   { key: "", label: "הכל" },
   { key: "news", label: "חדשות" },
   { key: "alert", label: "מבזקים" },
   { key: "event", label: "אירועים" },
 ];
 
+type SourceOption = { source_name: string; count: number };
+
 export default function NewsScreen() {
   const [list, setList] = useState<NewsT[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [source, setSource] = useState("");
+  const [sourceType, setSourceType] = useState("");
+  const [sourceName, setSourceName] = useState("");
+  const [sources, setSources] = useState<SourceOption[]>([]);
   const router = useRouter();
+
+  const loadSources = useCallback(async () => {
+    try {
+      const s = await api.newsSources();
+      setSources(Array.isArray(s) ? s : []);
+    } catch (e) {
+      console.warn("sources", e);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     try {
-      const data = await api.news({ source: source || undefined });
+      const data = await api.news({
+        source: sourceType || undefined,
+        source_name: sourceName || undefined,
+      });
       setList(Array.isArray(data) ? data : []);
     } catch (e) {
       console.warn("load news", e);
@@ -31,7 +47,11 @@ export default function NewsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [source]);
+  }, [sourceType, sourceName]);
+
+  useEffect(() => {
+    loadSources();
+  }, [loadSources]);
 
   useEffect(() => {
     setLoading(true);
@@ -40,6 +60,7 @@ export default function NewsScreen() {
 
   const onRefresh = () => {
     setRefreshing(true);
+    loadSources();
     load();
   };
 
@@ -52,19 +73,43 @@ export default function NewsScreen() {
         </Text>
       </View>
 
+      {/* Source type filter */}
       <View style={styles.chipsRow}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: SPACING.md, flexDirection: "row-reverse" }}>
-          {SOURCES.map((s) => (
+          {TYPES.map((s) => (
             <FilterChip
               key={s.key || "all"}
               label={s.label}
-              active={source === s.key}
-              onPress={() => setSource(s.key)}
-              testID={`news-src-${s.key || "all"}`}
+              active={sourceType === s.key}
+              onPress={() => setSourceType(s.key)}
+              testID={`news-type-${s.key || "all"}`}
             />
           ))}
         </ScrollView>
       </View>
+
+      {/* Source name filter */}
+      {sources.length > 0 && (
+        <View style={[styles.chipsRow, { paddingTop: 4 }]}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: SPACING.md, flexDirection: "row-reverse" }}>
+            <FilterChip
+              label="כל המקורות"
+              active={sourceName === ""}
+              onPress={() => setSourceName("")}
+              testID="news-src-all"
+            />
+            {sources.map((s) => (
+              <FilterChip
+                key={s.source_name}
+                label={`${s.source_name} (${s.count})`}
+                active={sourceName === s.source_name}
+                onPress={() => setSourceName(s.source_name)}
+                testID={`news-src-${s.source_name}`}
+              />
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       <ScrollView
         contentContainerStyle={{ paddingTop: SPACING.md, paddingBottom: 120 }}
@@ -75,7 +120,7 @@ export default function NewsScreen() {
             <ActivityIndicator color={COLORS.primary} />
           </View>
         ) : list.length === 0 ? (
-          <EmptyState title="אין חדשות" subtitle="נסה לרענן או לבחור קטגוריה אחרת" icon="newspaper-outline" />
+          <EmptyState title="אין חדשות" subtitle="נסה לרענן או לבחור קטגוריה/מקור אחר" icon="newspaper-outline" />
         ) : (
           list.map((n) => (
             <NewsCard

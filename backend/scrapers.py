@@ -47,8 +47,9 @@ def _parse_date(val: Any) -> datetime:
         return datetime.now(timezone.utc)
 
 
-def _extract_date(asoup) -> datetime:
-    """Robust published-date extraction from common meta tags."""
+def _extract_date(asoup) -> Optional[datetime]:
+    """Robust published-date extraction from common meta tags. Returns None if
+    no date could be determined — caller should store None rather than 'now'."""
     candidates = [
         asoup.find("meta", property="article:published_time"),
         asoup.find("meta", property="og:article:published_time"),
@@ -59,16 +60,60 @@ def _extract_date(asoup) -> datetime:
         asoup.find("meta", attrs={"name": "dcterms.issued"}),
         asoup.find("meta", attrs={"name": "dc.date"}),
         asoup.find("meta", attrs={"property": "article:modified_time"}),
+        asoup.find("meta", attrs={"property": "og:updated_time"}),
     ]
     for c in candidates:
         if c and c.get("content"):
-            d = _parse_date(c["content"])
-            if d:
-                return d
+            try:
+                dt = dtparse.parse(str(c["content"]))
+                return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+            except Exception:
+                continue
     t = asoup.find("time")
     if t:
-        return _parse_date(t.get("datetime") or t.get_text())
-    return datetime.now(timezone.utc)
+        raw = t.get("datetime") or t.get_text()
+        if raw:
+            try:
+                dt = dtparse.parse(str(raw).strip())
+                return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+            except Exception:
+                pass
+    return None
+
+
+async def _article_date(client: httpx.AsyncClient, url: str, use_browser: bool = False) -> Optional[datetime]:
+    """Fetch an article URL just to extract its publication date from meta tags."""
+    html = await _fetch_smart(client, url, use_browser=use_browser)
+    if not html:
+        return None
+    try:
+        return _extract_date(BeautifulSoup(html, "lxml"))
+    except Exception:
+        return None
+
+
+async def _enrich_dates(client: httpx.AsyncClient, articles: List[Dict[str, Any]], use_browser: bool = False, concurrency: int = 5) -> None:
+    """Populate published_at by fetching each article URL in parallel. Mutates in-place."""
+    if not articles:
+        return
+    sem = asyncio.Semaphore(concurrency)
+
+    async def run(a: Dict[str, Any]):
+        if a.get("published_at"):
+            return
+        async with sem:
+            try:
+                # prefer fast httpx even when listing required browser — individual
+                # articles are often accessible directly
+                d = await _article_date(client, a["source_url"], use_browser=False)
+                if not d and use_browser:
+                    d = await _article_date(client, a["source_url"], use_browser=True)
+                if d:
+                    a["published_at"] = d
+            except Exception:
+                pass
+
+    await asyncio.gather(*[run(a) for a in articles])
 
 
 def _contains_eilat(text: str) -> bool:
@@ -188,7 +233,7 @@ def _make_article(
     image: Optional[str],
     source_name: str,
     source_url: str,
-    published_at: datetime,
+    published_at: Optional[datetime],
     source_type: str = "news",
 ) -> Dict[str, Any]:
     return {
@@ -368,7 +413,7 @@ async def scrape_smarticket(client: httpx.AsyncClient) -> List[Dict[str, Any]]:
                 image=img,
                 source_name="אירועים — עיריית אילת",
                 source_url=full,
-                published_at=datetime.now(timezone.utc),
+                published_at=None,
                 source_type="event",
             )
         )
@@ -445,12 +490,13 @@ async def scrape_ynet_eilat(client: httpx.AsyncClient) -> List[Dict[str, Any]]:
                 image=img,
                 source_name="Ynet",
                 source_url=full,
-                published_at=datetime.now(timezone.utc),
+                published_at=None,
                 source_type="news",
             )
         )
         if len(out) >= 25:
             break
+    await _enrich_dates(client, out, use_browser=False, concurrency=5)
     return out
 
 
@@ -502,12 +548,13 @@ async def scrape_kan_eilat(client: httpx.AsyncClient) -> List[Dict[str, Any]]:
                 image=img,
                 source_name="כאן חדשות",
                 source_url=full,
-                published_at=datetime.now(timezone.utc),
+                published_at=None,
                 source_type="news",
             )
         )
         if len(out) >= 25:
             break
+    await _enrich_dates(client, out, use_browser=False, concurrency=5)
     return out
 
 
@@ -570,12 +617,13 @@ async def scrape_mako_eilat(client: httpx.AsyncClient) -> List[Dict[str, Any]]:
                 image=img,
                 source_name="Mako",
                 source_url=full,
-                published_at=datetime.now(timezone.utc),
+                published_at=None,
                 source_type="news",
             )
         )
         if len(out) >= 25:
             break
+    await _enrich_dates(client, out, use_browser=True, concurrency=3)
     return out
 
 
@@ -628,7 +676,7 @@ async def scrape_single_page(
             image=img,
             source_name=source_name,
             source_url=url,
-            published_at=datetime.now(timezone.utc),
+            published_at=None,
             source_type=source_type,
         )
     ]
@@ -677,7 +725,7 @@ async def scrape_listing_eilat_filtered(
                 image=img,
                 source_name=source_name,
                 source_url=full,
-                published_at=datetime.now(timezone.utc),
+                published_at=None,
                 source_type="news",
             )
         )

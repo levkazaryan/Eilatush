@@ -147,7 +147,7 @@ export default function ArticleScreen() {
             ) : null}
 
             <Text style={styles.title}>{article.title}</Text>
-            <Text style={styles.date}>{formatHebrewTime(article.published_at)}</Text>
+            <Text style={styles.date}>{article.published_at ? formatHebrewTime(article.published_at) : ""}</Text>
 
             {article.summary ? <Text style={styles.summary}>{article.summary}</Text> : null}
 
