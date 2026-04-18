@@ -14,6 +14,7 @@ from urllib.parse import urljoin, urlparse
 
 import feedparser
 import httpx
+import trafilatura
 from bs4 import BeautifulSoup
 from dateutil import parser as dtparse
 
@@ -129,7 +130,7 @@ async def _article_date(client: httpx.AsyncClient, url: str, use_browser: bool =
 
 
 async def _article_meta(client: httpx.AsyncClient, url: str, use_browser: bool = False) -> Dict[str, Any]:
-    """Fetch article URL and return dict with {date, title, image, summary, body_head}."""
+    """Fetch article URL and return dict with {date, title, image, summary, body_head, content_html}."""
     html = await _fetch_smart(client, url, use_browser=use_browser)
     if not html:
         return {}
@@ -150,17 +151,43 @@ async def _article_meta(client: httpx.AsyncClient, url: str, use_browser: bool =
         )
         if og_d and og_d.get("content"):
             out["summary"] = _strip(og_d["content"])[:400]
-        # body head (first 500 chars) — used for topic-relevance checks
-        main = (
-            soup.find("article")
-            or soup.find("main")
-            or soup.find("div", class_=re.compile("content|article|post|main", re.I))
-        )
-        if main:
-            for bad in main.find_all(["script", "style", "nav", "aside", "footer", "header", "form"]):
-                bad.decompose()
-            body_text = _strip(main.get_text())
-            out["body_head"] = body_text[:800]
+        # Clean article body via trafilatura — extracts ONLY the main article,
+        # discarding comments, ads, related-articles, newsletter CTAs, etc.
+        try:
+            clean_html = trafilatura.extract(
+                html,
+                include_formatting=True,
+                include_images=True,
+                include_links=False,
+                include_tables=False,
+                include_comments=False,
+                output_format="html",
+                favor_recall=False,
+                url=url,
+            )
+            if clean_html:
+                # trafilatura wraps output with <html><body>…</body></html> — strip it
+                inner = re.sub(r"^<html>\s*<body>\s*", "", clean_html)
+                inner = re.sub(r"\s*</body>\s*</html>\s*$", "", inner)
+                out["content_html"] = inner[:25000]
+                # build body_head from the extracted text (post-cleanup)
+                body_txt = _strip(BeautifulSoup(inner, "lxml").get_text())
+                if body_txt:
+                    out["body_head"] = body_txt[:800]
+        except Exception:
+            pass
+        # Fallback body_head if trafilatura failed
+        if not out.get("body_head"):
+            main = (
+                soup.find("article")
+                or soup.find("main")
+                or soup.find("div", class_=re.compile("content|article|post|main", re.I))
+            )
+            if main:
+                for bad in main.find_all(["script", "style", "nav", "aside", "footer", "header", "form"]):
+                    bad.decompose()
+                body_text = _strip(main.get_text())
+                out["body_head"] = body_text[:800]
         return out
     except Exception:
         return {}
@@ -206,6 +233,10 @@ async def _enrich_dates(client: httpx.AsyncClient, articles: List[Dict[str, Any]
                     a["summary"] = meta["summary"]
                 if meta.get("body_head"):
                     a["_body_head"] = meta["body_head"]
+                if meta.get("content_html"):
+                    # Always prefer trafilatura's clean article body over whatever
+                    # the scraper grabbed initially — drops comments/ads/related.
+                    a["content_html"] = meta["content_html"]
             except Exception:
                 pass
 
@@ -1125,6 +1156,26 @@ async def scrape_site_articles(
                 bad.decompose()
             content_html = str(main)[:20000]
             body_text = _strip(main.get_text())[:800]
+
+        # Prefer trafilatura-extracted clean article HTML — strips comments,
+        # related articles, newsletter CTAs, ads, etc.
+        try:
+            clean = trafilatura.extract(
+                art,
+                include_formatting=True,
+                include_images=True,
+                include_links=False,
+                include_tables=False,
+                include_comments=False,
+                output_format="html",
+                url=url,
+            )
+            if clean:
+                inner = re.sub(r"^<html>\s*<body>\s*", "", clean)
+                inner = re.sub(r"\s*</body>\s*</html>\s*$", "", inner)
+                content_html = inner[:25000]
+        except Exception:
+            pass
 
         # post-filter by Eilat keyword
         if require_eilat_keyword:
