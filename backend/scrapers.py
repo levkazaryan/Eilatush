@@ -660,6 +660,23 @@ async def _scrape_tag_page(
 ) -> List[Dict[str, Any]]:
     """Generic tag-page scraper: fetch the tag page, discover article links
     matching `link_pattern`, then enrich each with real publish dates."""
+    # Footer/nav boilerplate — skip if the anchor text OR later the article
+    # title matches any of these (static pages that happen to live under
+    # /article.aspx on some sites).
+    _BOILERPLATE = {
+        "תנאי שימוש", "מדיניות פרטיות", "צור קשר", "אודות", "ניוזלטר",
+        "ניוזלטרים", "RSS", "נגישות", "הצהרת נגישות", "הרשמה", "התחברות",
+        "המערכת", "מפת האתר", "פרסום באתר", "דיווח על תקלה",
+        "כלי חדש לניהול זמן",  # Globes' "my feed" promo landing
+    }
+    def _is_boilerplate(text: str) -> bool:
+        if not text:
+            return False
+        t = text.strip()
+        if any(b in t for b in _BOILERPLATE):
+            return True
+        return False
+
     html = await _fetch_smart(client, tag_url, use_browser=use_browser)
     if not html:
         return []
@@ -680,6 +697,9 @@ async def _scrape_tag_page(
             continue
         # Build a title candidate by walking up the DOM
         context = _strip(a.get_text())
+        # Skip footer/nav boilerplate links (Terms of Use, Privacy, Newsletter etc.)
+        if _is_boilerplate(context):
+            continue
         title = context
         node = a
         for _ in range(5):
@@ -721,6 +741,9 @@ async def _scrape_tag_page(
         if len(out) >= max_items:
             break
     await _enrich_dates(client, out, use_browser=enrich_use_browser, concurrency=4)
+    # Post-enrichment: drop any item whose final title (after og:title replace)
+    # is a static/boilerplate page such as "תנאי שימוש" / "מדיניות פרטיות".
+    out = [a for a in out if not _is_boilerplate(a.get("title", ""))]
     return out
 
 
