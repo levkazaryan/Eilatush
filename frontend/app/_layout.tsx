@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Stack } from "expo-router";
 import { I18nManager, Platform } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import { COLORS } from "../theme";
 
 // Force RTL on native; on web we toggle document.dir
 if (Platform.OS !== "web") {
@@ -20,17 +21,17 @@ export default function RootLayout() {
     if (Platform.OS === "web" && typeof document !== "undefined") {
       document.documentElement.setAttribute("dir", "rtl");
       document.documentElement.setAttribute("lang", "he");
-      document.body.style.backgroundColor = "#0C0C12";
+      document.body.style.backgroundColor = COLORS.bg;
     }
   }, []);
 
   return (
     <>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <Stack
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: "#0C0C12" },
+          contentStyle: { backgroundColor: COLORS.bg },
         }}
       />
     </>

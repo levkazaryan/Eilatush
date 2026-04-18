@@ -24,7 +24,7 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarShowLabel: false,
         tabBarStyle: {
-          backgroundColor: "rgba(12,12,18,0.92)",
+          backgroundColor: "#FFFFFF",
           borderTopColor: COLORS.border,
           borderTopWidth: 1,
           height: Platform.OS === "web" ? 68 : 78,
@@ -114,12 +114,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     shadowColor: COLORS.primary,
-    shadowOpacity: 0.6,
+    shadowOpacity: 0.45,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 4 },
     elevation: 8,
     borderWidth: 3,
-    borderColor: COLORS.bg,
+    borderColor: "#FFFFFF",
   },
   centerBubbleActive: {
     backgroundColor: COLORS.primaryHover,

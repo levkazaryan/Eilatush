@@ -230,7 +230,7 @@ export function BusinessCard({ item }: { item: BusinessT }) {
 export function JobCard({ item }: { item: JobT }) {
   const urg = item.urgency;
   const urgColor = urg === "now" ? COLORS.primary : urg === "soon" ? COLORS.secondary : COLORS.textSecondary;
-  const urgBg = urg === "now" ? "rgba(255,81,47,0.15)" : urg === "soon" ? "rgba(0,242,254,0.12)" : "rgba(255,255,255,0.07)";
+  const urgBg = urg === "now" ? "rgba(230,57,70,0.10)" : urg === "soon" ? "rgba(20,184,179,0.10)" : "rgba(15,23,42,0.05)";
   return (
     <View style={styles.jobCard} testID={`job-card-${item.id}`}>
       <View style={styles.jobHeader}>
@@ -357,6 +357,11 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderWidth: 1,
     borderColor: COLORS.border,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   eventImage: { width: "100%", height: 140 },
   eventImageOverlay: {
@@ -408,7 +413,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   pricePill: {
-    backgroundColor: "rgba(255,255,255,0.07)",
+    backgroundColor: "rgba(15,23,42,0.06)",
     borderRadius: RADIUS.pill,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -439,12 +444,12 @@ const styles = StyleSheet.create({
     marginEnd: 2,
   },
   categoryPill: {
-    color: COLORS.textPrimary,
+    color: "#FFFFFF",
     fontSize: 11,
     fontWeight: "700",
     paddingHorizontal: 8,
     paddingVertical: 3,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: "rgba(15,23,42,0.65)",
     borderRadius: RADIUS.pill,
     overflow: "hidden",
   },
@@ -454,7 +459,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     paddingHorizontal: 8,
     paddingVertical: 2,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(15,23,42,0.05)",
     borderRadius: RADIUS.pill,
     overflow: "hidden",
   },
@@ -469,6 +474,11 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderWidth: 1,
     borderColor: COLORS.border,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   bizImage: { width: 110, height: "100%", minHeight: 140 },
   bizBody: { flex: 1, padding: 12 },
@@ -489,8 +499,8 @@ const styles = StyleSheet.create({
   dealBadge: {
     flexDirection: "row-reverse",
     alignItems: "center",
-    backgroundColor: "rgba(255,81,47,0.10)",
-    borderColor: "rgba(255,81,47,0.35)",
+    backgroundColor: "rgba(230,57,70,0.08)",
+    borderColor: "rgba(230,57,70,0.35)",
     borderWidth: 1,
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -511,6 +521,11 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   jobHeader: { flexDirection: "row-reverse", alignItems: "center", gap: 6, flexWrap: "wrap" },
   urgencyPill: {
@@ -530,8 +545,8 @@ const styles = StyleSheet.create({
   salaryPill: {
     flexDirection: "row-reverse",
     alignItems: "center",
-    backgroundColor: "rgba(0,242,254,0.08)",
-    borderColor: "rgba(0,242,254,0.25)",
+    backgroundColor: "rgba(20,184,179,0.08)",
+    borderColor: "rgba(20,184,179,0.30)",
     borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -559,6 +574,11 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderWidth: 1,
     borderColor: COLORS.border,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   newsImage: { width: "100%", height: 140 },
   newsBody: { padding: SPACING.md },
@@ -578,14 +598,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: RADIUS.pill,
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: COLORS.border,
     marginEnd: 8,
   },
   chipActive: {
-    backgroundColor: "rgba(255,81,47,0.12)",
-    borderColor: "rgba(255,81,47,0.5)",
+    backgroundColor: "rgba(230,57,70,0.10)",
+    borderColor: "rgba(230,57,70,0.45)",
   },
   chipText: { color: COLORS.textSecondary, fontSize: 13, fontWeight: "700" },
   chipTextActive: { color: COLORS.primary },
