@@ -97,20 +97,31 @@ _PW_CTX: Dict[str, Any] = {"browser": None, "pw": None, "lock": asyncio.Lock()}
 
 
 async def _pw_fetch(url: str) -> Optional[str]:
-    """Fetch a URL via headless Chromium. Used for sites that block httpx/bots
-    (kan, gov.il, tiuli, etc.). Renders JS and returns final HTML."""
+    """Fetch a URL via headless Chromium + stealth patches. Used for sites that
+    block httpx/bots (kan, gov.il, tiuli, etc.). Renders JS and returns final HTML."""
     try:
         from playwright.async_api import async_playwright
     except Exception as e:
         log.warning("playwright not installed: %s", e)
         return None
+    # stealth patches (anti-detection for headless Chromium)
+    try:
+        from playwright_stealth import Stealth  # type: ignore
+        stealth = Stealth()
+    except Exception:
+        stealth = None
     async with _PW_CTX["lock"]:
         if _PW_CTX["browser"] is None:
             try:
                 pw = await async_playwright().start()
                 browser = await pw.chromium.launch(
                     headless=True,
-                    args=["--no-sandbox", "--disable-dev-shm-usage"],
+                    args=[
+                        "--no-sandbox",
+                        "--disable-dev-shm-usage",
+                        "--disable-blink-features=AutomationControlled",
+                        "--disable-features=IsolateOrigins,site-per-process",
+                    ],
                 )
                 _PW_CTX["pw"] = pw
                 _PW_CTX["browser"] = browser
@@ -121,19 +132,29 @@ async def _pw_fetch(url: str) -> Optional[str]:
     context = None
     try:
         context = await browser.new_context(
-            user_agent=HEADERS["User-Agent"],
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            ),
             locale="he-IL",
-            viewport={"width": 1280, "height": 900},
+            timezone_id="Asia/Jerusalem",
+            viewport={"width": 1366, "height": 820},
+            ignore_https_errors=True,
         )
+        if stealth is not None:
+            try:
+                await stealth.apply_stealth_async(context)
+            except Exception as e:
+                log.debug("stealth apply failed: %s", e)
         page = await context.new_page()
         try:
-            await page.goto(url, wait_until="domcontentloaded", timeout=25000)
+            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
             # Wait for SPA content to hydrate — required for Kan, Gov.il, Tiuli
             try:
-                await page.wait_for_load_state("networkidle", timeout=10000)
+                await page.wait_for_load_state("networkidle", timeout=12000)
             except Exception:
                 pass
-            await page.wait_for_timeout(3000)
+            await page.wait_for_timeout(4000)
             html = await page.content()
             return html
         except Exception as e:
@@ -369,9 +390,9 @@ YNET_RSS_CANDIDATES = [
 async def scrape_ynet_eilat(client: httpx.AsyncClient) -> List[Dict[str, Any]]:
     """Ynet — filter for Eilat-related content."""
     out: List[Dict[str, Any]] = []
-    # try topic page via HTML
     topic_url = "https://www.ynet.co.il/topics/%D7%90%D7%99%D7%9C%D7%AA"
-    html = await _fetch(client, topic_url)
+    # Try stealth browser first — Ynet topic pages sometimes block httpx
+    html = await _pw_fetch(topic_url) or await _fetch(client, topic_url)
     if html:
         soup = BeautifulSoup(html, "lxml")
         seen = set()
@@ -387,7 +408,6 @@ async def scrape_ynet_eilat(client: httpx.AsyncClient) -> List[Dict[str, Any]]:
             if len(title) < 10:
                 continue
             if not _contains_eilat(title):
-                # also check parent context
                 parent_text = _strip(a.parent.get_text() if a.parent else "")
                 if not _contains_eilat(parent_text):
                     continue
@@ -405,7 +425,7 @@ async def scrape_ynet_eilat(client: httpx.AsyncClient) -> List[Dict[str, Any]]:
                     source_type="news",
                 )
             )
-            if len(out) >= 10:
+            if len(out) >= 30:
                 break
     return out
 
@@ -415,8 +435,9 @@ async def scrape_ynet_eilat(client: httpx.AsyncClient) -> List[Dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 async def scrape_mako_eilat(client: httpx.AsyncClient) -> List[Dict[str, Any]]:
-    url = "https://mobile.mako.co.il/Tagit/%D7%90%D7%99%D7%9C%D7%AA"
-    html = await _fetch(client, url)
+    url = "https://www.mako.co.il/Tagit/%D7%90%D7%99%D7%9C%D7%AA"
+    # Use stealth browser first — Mako blocks httpx bots
+    html = await _pw_fetch(url) or await _fetch(client, url)
     if not html:
         return []
     soup = BeautifulSoup(html, "lxml")
@@ -429,20 +450,41 @@ async def scrape_mako_eilat(client: httpx.AsyncClient) -> List[Dict[str, Any]]:
         full = urljoin("https://www.mako.co.il", href)
         if full in seen:
             continue
-        seen.add(full)
-        title = _strip(a.get_text())
-        if len(title) < 10:
+        # Walk up ancestors to find the article title/context text
+        context = _strip(a.get_text())
+        node = a
+        for _ in range(6):
+            if node is None:
+                break
+            t = _strip(node.get_text())
+            if len(t) > len(context):
+                context = t
+            node = node.parent
+        if not _contains_eilat(context):
             continue
-        if not _contains_eilat(title):
-            parent_text = _strip(a.parent.get_text() if a.parent else "")
-            if not _contains_eilat(parent_text):
-                continue
+        # Pick the best available title
+        title = ""
+        for cls in ("title-wrap", "title", "titleArea", "h2", "h3"):
+            el = a.find(cls) or (a.parent.find(cls) if a.parent else None)
+            if el:
+                tt = _strip(el.get_text())
+                if tt:
+                    title = tt
+                    break
+        if not title:
+            # fallback to longest contextual text < 200 chars
+            title = context[:150]
+        if len(title) < 8:
+            continue
         img_tag = a.find("img")
         img = img_tag.get("src") if img_tag else None
+        if img and img.startswith("//"):
+            img = "https:" + img
+        seen.add(full)
         out.append(
             _make_article(
                 title=title,
-                summary=title,
+                summary=context[:300],
                 content_html=f'<p>{title}</p><p><a href="{full}">קרא את הכתבה המלאה ב-Mako</a></p>',
                 image=img,
                 source_name="Mako",
@@ -451,7 +493,7 @@ async def scrape_mako_eilat(client: httpx.AsyncClient) -> List[Dict[str, Any]]:
                 source_type="news",
             )
         )
-        if len(out) >= 8:
+        if len(out) >= 25:
             break
     return out
 
