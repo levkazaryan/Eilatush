@@ -969,6 +969,7 @@ async def scrape_site_articles(
     source_name: str,
     source_type: str = "news",
     link_patterns: Optional[List[str]] = None,
+    exclude_patterns: Optional[List[str]] = None,
     max_items: int = 15,
     require_eilat_keyword: bool = False,
     use_browser: bool = False,
@@ -984,6 +985,7 @@ async def scrape_site_articles(
     seen: set = set()
     candidates: List[str] = []
     patterns = [re.compile(p) for p in (link_patterns or [])]
+    excludes = [re.compile(p) for p in (exclude_patterns or [])]
     for a in soup.find_all("a", href=True):
         href = a["href"].strip()
         if not href or href.startswith(("javascript:", "#", "mailto:", "tel:")):
@@ -1011,6 +1013,9 @@ async def scrape_site_articles(
                 "/cart", "/checkout", "/account", ".pdf", ".jpg", ".png", ".gif", ".xml",
             ]):
                 continue
+        # per-source exclusion patterns
+        if excludes and any(ex.search(full) for ex in excludes):
+            continue
         # Eilat keyword pre-filter: check anchor text + parent context
         if require_eilat_keyword:
             anchor_text = _strip(a.get_text())
@@ -1033,17 +1038,12 @@ async def scrape_site_articles(
         if not art:
             continue
         asoup = BeautifulSoup(art, "lxml")
-        # title
-        title = ""
-        og_t = asoup.find("meta", property="og:title")
-        if og_t and og_t.get("content"):
-            title = _strip(og_t["content"])
-        if not title:
-            h1 = asoup.find(["h1", "h2"])
-            if h1:
-                title = _strip(h1.get_text())
-        if not title and asoup.title:
-            title = _strip(asoup.title.get_text())
+        # Extract date FIRST — before any decomposing, because some sites
+        # (yomyom.net) put <meta itemprop="datePublished"> inside a <header>
+        # tag which we decompose when cleaning the content body below.
+        pub = _extract_date(asoup)
+        # title — use shared extractor so trailing " - SiteName" gets stripped
+        title = _extract_title(asoup) or ""
         if not title or len(title) < 8:
             continue
 
@@ -1079,8 +1079,6 @@ async def scrape_site_articles(
         if require_eilat_keyword:
             if not _contains_eilat(title + " " + summary + " " + body_text):
                 continue
-
-        pub = _extract_date(asoup)
 
         if not summary:
             summary = body_text[:300] if body_text else title
@@ -1135,17 +1133,17 @@ SCRAPERS = [
 SINGLE_PAGE_SOURCES: List = []  # not used any longer — all sources are full-site
 
 # Full sites — scrape homepage + follow article links.
-# Format: (base_url, source_name, source_type, link_patterns, max_items, require_eilat_keyword, use_browser)
+# Format: (base_url, source_name, source_type, link_patterns, exclude_patterns, max_items, require_eilat_keyword, use_browser)
 FULL_SITE_SOURCES = [
     # Eilat-only domains → no keyword filter (everything IS Eilat)
-    ("https://eilat.city/", "אילת סיטי", "news", None, 50, False, False),
-    ("https://eilatport.co.il/", "נמל אילת", "news", None, 40, False, False),
-    ("https://icemalleilat.co.il/", "אייס מול אילת", "event", None, 40, False, False),
-    ("https://biz.eilat.muni.il/", "עסקים — עיריית אילת", "news", None, 40, False, False),
-    # יום יום (regional)
-    ("https://www.yomyom.net/", "יום יום", "news", None, 40, True, False),
-    # Ynet / Mako / Kan: handled by dedicated topic/tag scrapers (SCRAPERS list)
-    # Tiuli, SBA, Parks, Gov.il: deactivated per user (low value vs. effort)
+    ("https://eilatport.co.il/", "נמל אילת", "news", None, None, 40, False, False),
+    ("https://icemalleilat.co.il/", "אייס מול אילת", "event", None, None, 40, False, False),
+    ("https://biz.eilat.muni.il/", "עסקים — עיריית אילת", "news", None, None, 40, False, False),
+    # יום יום (regional) — exclude category listing pages (ShowCat.asp = "places", not articles)
+    ("https://www.yomyom.net/", "יום יום", "news", None, [r"(?i)showcat\.asp"], 40, True, False),
+    # Ynet / Mako / Kan / Israel Hayom / Maariv / Globes / Davar / Walla:
+    # handled by dedicated tag scrapers (SCRAPERS list)
+    # eilat.city removed — pure tourism portal, no real news articles
 ]
 
 LISTING_FILTERED_SOURCES: List = []  # merged into FULL_SITE_SOURCES above
@@ -1170,7 +1168,7 @@ async def run_all_scrapers() -> List[Dict[str, Any]]:
             except Exception as e:
                 log.exception("single %s failed: %s", src, e)
 
-        for url, src, stype, patterns, max_items, req_eilat, use_browser in FULL_SITE_SOURCES:
+        for url, src, stype, patterns, ex_patterns, max_items, req_eilat, use_browser in FULL_SITE_SOURCES:
             try:
                 items = await scrape_site_articles(
                     client,
@@ -1178,6 +1176,7 @@ async def run_all_scrapers() -> List[Dict[str, Any]]:
                     source_name=src,
                     source_type=stype,
                     link_patterns=patterns,
+                    exclude_patterns=ex_patterns,
                     max_items=max_items,
                     require_eilat_keyword=req_eilat,
                     use_browser=use_browser,

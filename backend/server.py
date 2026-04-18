@@ -178,20 +178,19 @@ async def get_jobs(urgency: Optional[str] = None, category: Optional[str] = None
 
 @api_router.get("/news")
 async def get_news(source: Optional[str] = None, source_name: Optional[str] = None):
-    query: Dict[str, Any] = {}
+    query: Dict[str, Any] = {
+        # only return real articles that have a publication date
+        "published_at": {"$ne": None},
+    }
     if source:
         query["source_type"] = source
     if source_name:
         query["source_name"] = source_name
     docs = await db.news.find(query, {"_id": 0}).to_list(500)
-    # Sort: articles with a real published_at first (newest → oldest),
-    # then articles without a date at the end (by fetched_at desc).
+    # Sort by real published_at (newest → oldest)
     def _key(d):
         p = d.get("published_at")
-        f = d.get("fetched_at") or datetime.min.replace(tzinfo=timezone.utc)
-        if p is None:
-            return (1, -f.timestamp() if isinstance(f, datetime) else 0)
-        return (0, -p.timestamp() if isinstance(p, datetime) else 0)
+        return -p.timestamp() if isinstance(p, datetime) else 0
     docs.sort(key=_key)
     # strip heavy content_html from list response
     for d in docs:
@@ -201,9 +200,12 @@ async def get_news(source: Optional[str] = None, source_name: Optional[str] = No
 
 @api_router.get("/news/sources")
 async def get_news_sources():
-    """Return list of distinct source_name values present in the news collection, with counts."""
+    """Return list of distinct source_name values (articles w/ a real publication date)."""
     pipeline = [
-        {"$match": {"source_name": {"$exists": True, "$ne": None}}},
+        {"$match": {
+            "source_name": {"$exists": True, "$ne": None},
+            "published_at": {"$ne": None},
+        }},
         {"$group": {"_id": "$source_name", "count": {"$sum": 1}}},
         {"$sort": {"count": -1}},
     ]
