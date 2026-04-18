@@ -315,8 +315,8 @@ export function NewsCard({ item, onPress, onSourcePress }: { item: NewsT; onPres
           {item.summary}
         </Text>
         <View style={styles.readMoreRow}>
-          <Text style={styles.readMoreText}>קרא עוד</Text>
           <Ionicons name="chevron-back" size={16} color={COLORS.primary} />
+          <Text style={styles.readMoreText}>קרא עוד</Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -616,7 +616,13 @@ const styles = StyleSheet.create({
   newsDate: { color: COLORS.textMuted, fontSize: 11 },
   newsTitle: { color: COLORS.textPrimary, fontSize: 16, fontWeight: "900", textAlign: "right", writingDirection: "rtl" },
   newsSummary: { color: COLORS.textSecondary, fontSize: 13, marginTop: 6, lineHeight: 20, textAlign: "right", writingDirection: "rtl" },
-  readMoreRow: { flexDirection: "row-reverse", alignItems: "center", marginTop: 10, gap: 4 },
+  readMoreRow: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    marginTop: 10,
+    gap: 4,
+  },
   readMoreText: { color: COLORS.primary, fontSize: 13, fontWeight: "700" },
 
   // Section
