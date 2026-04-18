@@ -471,6 +471,139 @@ async def scrape_listing_eilat_filtered(
     return out
 
 
+async def scrape_site_articles(
+    client: httpx.AsyncClient,
+    base_url: str,
+    source_name: str,
+    source_type: str = "news",
+    link_patterns: Optional[List[str]] = None,
+    max_items: int = 15,
+    require_eilat_keyword: bool = False,
+) -> List[Dict[str, Any]]:
+    """Scan a site's homepage, discover article links, fetch each and extract title/content.
+    Only follow links on the same domain. When require_eilat_keyword=True, keep only
+    articles whose title/content mentions Eilat (for sites that are not Eilat-only).
+    """
+    html = await _fetch(client, base_url)
+    if not html:
+        return []
+    soup = BeautifulSoup(html, "lxml")
+    base_host = urlparse(base_url).netloc
+    seen: set = set()
+    candidates: List[str] = []
+    patterns = [re.compile(p) for p in (link_patterns or [])]
+    for a in soup.find_all("a", href=True):
+        href = a["href"].strip()
+        if not href or href.startswith(("javascript:", "#", "mailto:", "tel:")):
+            continue
+        full = urljoin(base_url, href)
+        if not full.startswith(("http://", "https://")):
+            continue
+        if urlparse(full).netloc.replace("www.", "") != base_host.replace("www.", ""):
+            continue
+        if full.rstrip("/") == base_url.rstrip("/"):
+            continue
+        if full in seen:
+            continue
+        # must look like an article/content link — either match known patterns
+        # or have a "deep" path (>= 2 segments) which is a good heuristic
+        path = urlparse(full).path
+        if patterns:
+            if not any(p.search(full) for p in patterns):
+                continue
+        else:
+            segs = [s for s in path.split("/") if s]
+            if len(segs) < 1:
+                continue
+            # skip obvious non-content
+            if any(bad in path.lower() for bad in [
+                "/tag/", "/category/", "/author/", "/search", "/login", "/register",
+                "/wp-admin", "/wp-login", "/contact", "/about", "/privacy", "/terms",
+                "/cart", "/checkout", "/account", ".pdf", ".jpg", ".png", ".gif", ".xml",
+            ]):
+                continue
+        seen.add(full)
+        candidates.append(full)
+
+    out: List[Dict[str, Any]] = []
+    for url in candidates:
+        if len(out) >= max_items:
+            break
+        art = await _fetch(client, url)
+        if not art:
+            continue
+        asoup = BeautifulSoup(art, "lxml")
+        # title: og:title > article h1 > document title
+        title = ""
+        og_t = asoup.find("meta", property="og:title")
+        if og_t and og_t.get("content"):
+            title = _strip(og_t["content"])
+        if not title:
+            h1 = asoup.find(["h1", "h2"])
+            if h1:
+                title = _strip(h1.get_text())
+        if not title and asoup.title:
+            title = _strip(asoup.title.get_text())
+        if not title or len(title) < 8:
+            continue
+
+        # description
+        summary = ""
+        og_d = asoup.find("meta", property="og:description") or asoup.find(
+            "meta", attrs={"name": "description"}
+        )
+        if og_d and og_d.get("content"):
+            summary = _strip(og_d["content"])
+
+        # hero image
+        hero = None
+        og_img = asoup.find("meta", property="og:image")
+        if og_img and og_img.get("content"):
+            hero = urljoin(url, og_img["content"])
+
+        # body: article/main/content div
+        main = (
+            asoup.find("article")
+            or asoup.find("main")
+            or asoup.find("div", class_=re.compile("content|article|post|main", re.I))
+        )
+        content_html = ""
+        body_text = ""
+        if main:
+            for bad in main.find_all(["script", "style", "nav", "aside", "footer", "header", "form"]):
+                bad.decompose()
+            content_html = str(main)[:20000]
+            body_text = _strip(main.get_text())[:800]
+
+        # optional Eilat keyword filter
+        if require_eilat_keyword:
+            if not _contains_eilat(title + " " + summary + " " + body_text):
+                continue
+
+        # optional date
+        pub = datetime.now(timezone.utc)
+        t = asoup.find("time")
+        if t:
+            pub = _parse_date(t.get("datetime") or t.get_text())
+
+        if not summary:
+            summary = body_text[:300] if body_text else title
+
+        out.append(
+            _make_article(
+                title=title,
+                summary=summary,
+                content_html=content_html or f"<p>{summary}</p>",
+                image=hero,
+                source_name=source_name,
+                source_url=url,
+                published_at=pub,
+                source_type=source_type,
+            )
+        )
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Facebook — NOT SUPPORTED without Graph API
 # ---------------------------------------------------------------------------
@@ -498,12 +631,9 @@ SCRAPERS = [
 
 
 SINGLE_PAGE_SOURCES = [
-    ("https://eilat.city/", "אילת סיטי", "news"),
-    ("https://eilatport.co.il/", "נמל אילת", "news"),
-    ("https://icemalleilat.co.il/", "אייס מול אילת", "event"),
+    # These URLs are specific deep-link pages (one article each) — keep as single-page
     ("https://www.tiuli.com/articles/1925/-329", "טיולי", "news"),
     ("https://www.gov.il/he/pages/information-eilat-development", "ממשל ישראל — פיתוח אילת", "news"),
-    ("https://biz.eilat.muni.il/", "עסקים — עיריית אילת", "news"),
     (
         "https://www.sba.org.il/hb/MaofServices/courses/Pages/Eilat/ye-13-09-23.aspx",
         "הסוכנות לעסקים קטנים — אילת",
@@ -514,6 +644,15 @@ SINGLE_PAGE_SOURCES = [
         "כאן חדשות",
         "news",
     ),
+]
+
+# Full sites — scrape homepage + follow all article links on the same domain
+FULL_SITE_SOURCES = [
+    # (base_url, source_name, source_type, link_patterns, max_items, require_eilat_keyword)
+    ("https://eilat.city/", "אילת סיטי", "news", None, 20, False),
+    ("https://eilatport.co.il/", "נמל אילת", "news", None, 15, False),
+    ("https://icemalleilat.co.il/", "אייס מול אילת", "event", None, 20, False),
+    ("https://biz.eilat.muni.il/", "עסקים — עיריית אילת", "news", None, 20, False),
 ]
 
 LISTING_FILTERED_SOURCES = [
@@ -540,6 +679,22 @@ async def run_all_scrapers() -> List[Dict[str, Any]]:
                 all_articles.extend(items)
             except Exception as e:
                 log.exception("single %s failed: %s", src, e)
+
+        for url, src, stype, patterns, max_items, req_eilat in FULL_SITE_SOURCES:
+            try:
+                items = await scrape_site_articles(
+                    client,
+                    base_url=url,
+                    source_name=src,
+                    source_type=stype,
+                    link_patterns=patterns,
+                    max_items=max_items,
+                    require_eilat_keyword=req_eilat,
+                )
+                log.info("full-site %s → %d articles", src, len(items))
+                all_articles.extend(items)
+            except Exception as e:
+                log.exception("full-site %s failed: %s", src, e)
 
         for url, src, pat in LISTING_FILTERED_SOURCES:
             try:
