@@ -35,13 +35,22 @@ def _hash_url(url: str) -> str:
     return hashlib.sha1(url.encode("utf-8")).hexdigest()[:20]
 
 
+def _dt_parse(val: str) -> datetime:
+    """Parse a date string. Use dayfirst=True only for non-ISO formats
+    (Israeli sources often use DD/MM/YYYY)."""
+    s = str(val).strip()
+    # ISO 8601 always starts with 4-digit year
+    is_iso = bool(re.match(r"^\d{4}[-/]", s))
+    return dtparse.parse(s, dayfirst=not is_iso)
+
+
 def _parse_date(val: Any) -> datetime:
     if not val:
         return datetime.now(timezone.utc)
     if isinstance(val, datetime):
         return val if val.tzinfo else val.replace(tzinfo=timezone.utc)
     try:
-        dt = dtparse.parse(str(val))
+        dt = _dt_parse(val)
         return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
     except Exception:
         return datetime.now(timezone.utc)
@@ -53,6 +62,7 @@ def _extract_date(asoup) -> Optional[datetime]:
     candidates = [
         asoup.find("meta", property="article:published_time"),
         asoup.find("meta", property="og:article:published_time"),
+        asoup.find("meta", property="og:published_time"),
         asoup.find("meta", attrs={"itemprop": "datePublished"}),
         asoup.find("meta", attrs={"name": "date"}),
         asoup.find("meta", attrs={"name": "pubdate"}),
@@ -65,7 +75,7 @@ def _extract_date(asoup) -> Optional[datetime]:
     for c in candidates:
         if c and c.get("content"):
             try:
-                dt = dtparse.parse(str(c["content"]))
+                dt = _dt_parse(c["content"])
                 return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
             except Exception:
                 continue
@@ -74,10 +84,36 @@ def _extract_date(asoup) -> Optional[datetime]:
         raw = t.get("datetime") or t.get_text()
         if raw:
             try:
-                dt = dtparse.parse(str(raw).strip())
+                dt = _dt_parse(raw)
                 return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
             except Exception:
                 pass
+    return None
+
+
+def _extract_title(asoup) -> Optional[str]:
+    """Extract a clean article title from meta tags."""
+    def _clean(t: str) -> str:
+        # only strip trailing " | Site" or " - Site" when separator has whitespace on BOTH sides
+        # and the tail is short (<= 30 chars) and doesn't look like part of the headline.
+        t = re.sub(r"\s+[\|\-–—]\s+[^|\-–—:,.?!״]{2,30}$", "", t).strip()
+        # strip leading date like "05.04.2026 " sometimes prepended (e.g. Davar)
+        t = re.sub(r"^\d{1,2}[./]\d{1,2}[./]\d{2,4}\s+", "", t).strip()
+        return t
+    og = asoup.find("meta", property="og:title")
+    if og and og.get("content"):
+        t = _clean(_strip(og["content"]))
+        if t and len(t) >= 8:
+            return t
+    h1 = asoup.find(["h1", "h2"])
+    if h1:
+        t = _clean(_strip(h1.get_text()))
+        if t and len(t) >= 8:
+            return t
+    if asoup.title:
+        t = _clean(_strip(asoup.title.get_text()))
+        if t and len(t) >= 8:
+            return t
     return None
 
 
@@ -92,24 +128,72 @@ async def _article_date(client: httpx.AsyncClient, url: str, use_browser: bool =
         return None
 
 
+async def _article_meta(client: httpx.AsyncClient, url: str, use_browser: bool = False) -> Dict[str, Any]:
+    """Fetch article URL and return dict with {date, title, image}."""
+    html = await _fetch_smart(client, url, use_browser=use_browser)
+    if not html:
+        return {}
+    try:
+        soup = BeautifulSoup(html, "lxml")
+        out: Dict[str, Any] = {}
+        d = _extract_date(soup)
+        if d:
+            out["published_at"] = d
+        t = _extract_title(soup)
+        if t:
+            out["title"] = t
+        og_img = soup.find("meta", property="og:image")
+        if og_img and og_img.get("content"):
+            out["image"] = urljoin(url, og_img["content"])
+        og_d = soup.find("meta", property="og:description") or soup.find(
+            "meta", attrs={"name": "description"}
+        )
+        if og_d and og_d.get("content"):
+            out["summary"] = _strip(og_d["content"])[:400]
+        return out
+    except Exception:
+        return {}
+
+
 async def _enrich_dates(client: httpx.AsyncClient, articles: List[Dict[str, Any]], use_browser: bool = False, concurrency: int = 5) -> None:
-    """Populate published_at by fetching each article URL in parallel. Mutates in-place."""
+    """Populate published_at, title (if breadcrumb/noisy) and image by fetching
+    each article URL in parallel. Mutates in-place."""
     if not articles:
         return
     sem = asyncio.Semaphore(concurrency)
 
+    def _title_looks_bad(t: str) -> bool:
+        if not t:
+            return True
+        # breadcrumb trails ("site>tag>..."), or very long/short
+        if ">" in t and t.count(">") >= 2:
+            return True
+        # date prefix like "05.04.2026 ..." (Davar listing titles)
+        if re.match(r"^\d{1,2}[./]\d{1,2}[./]\d{2,4}\s", t):
+            return True
+        if len(t) < 10 or len(t) > 250:
+            return True
+        return False
+
     async def run(a: Dict[str, Any]):
-        if a.get("published_at"):
+        needs_date = not a.get("published_at")
+        needs_title = _title_looks_bad(a.get("title", ""))
+        needs_image = not a.get("image")
+        if not (needs_date or needs_title or needs_image):
             return
         async with sem:
             try:
-                # prefer fast httpx even when listing required browser — individual
-                # articles are often accessible directly
-                d = await _article_date(client, a["source_url"], use_browser=False)
-                if not d and use_browser:
-                    d = await _article_date(client, a["source_url"], use_browser=True)
-                if d:
-                    a["published_at"] = d
+                meta = await _article_meta(client, a["source_url"], use_browser=False)
+                if not meta and use_browser:
+                    meta = await _article_meta(client, a["source_url"], use_browser=True)
+                if meta.get("published_at") and needs_date:
+                    a["published_at"] = meta["published_at"]
+                if meta.get("title") and needs_title:
+                    a["title"] = meta["title"][:300]
+                if meta.get("image") and needs_image:
+                    a["image"] = meta["image"]
+                if meta.get("summary") and (not a.get("summary") or len(a.get("summary", "")) < 30):
+                    a["summary"] = meta["summary"]
             except Exception:
                 pass
 
@@ -562,12 +646,21 @@ async def scrape_kan_eilat(client: httpx.AsyncClient) -> List[Dict[str, Any]]:
 # Israel Hayom — Eilat tag
 # ---------------------------------------------------------------------------
 
-async def scrape_israelhayom_eilat(client: httpx.AsyncClient) -> List[Dict[str, Any]]:
-    """Israel Hayom — scrape Eilat tag listing."""
-    url = "https://www.israelhayom.co.il/tag/%D7%90%D7%99%D7%9C%D7%AA"
-    html = await _fetch(client, url)
-    if not html:
-        html = await _pw_fetch(url)
+async def _scrape_tag_page(
+    client: httpx.AsyncClient,
+    tag_url: str,
+    source_name: str,
+    base_host: str,
+    link_pattern: re.Pattern,
+    host_whitelist: Optional[List[str]] = None,
+    max_items: int = 25,
+    use_browser: bool = False,
+    enrich_use_browser: bool = False,
+    require_eilat_in_context: bool = False,
+) -> List[Dict[str, Any]]:
+    """Generic tag-page scraper: fetch the tag page, discover article links
+    matching `link_pattern`, then enrich each with real publish dates."""
+    html = await _fetch_smart(client, tag_url, use_browser=use_browser)
     if not html:
         return []
     soup = BeautifulSoup(html, "lxml")
@@ -575,15 +668,17 @@ async def scrape_israelhayom_eilat(client: httpx.AsyncClient) -> List[Dict[str, 
     seen = set()
     for a in soup.find_all("a", href=True):
         href = a["href"]
-        if "/article/" not in href:
+        full = urljoin(tag_url, href)
+        if not full.startswith(("http://", "https://")):
             continue
-        full = urljoin("https://www.israelhayom.co.il", href)
-        # keep only article URLs under israelhayom.co.il
-        if "israelhayom.co.il" not in full:
+        host = urlparse(full).netloc.lower()
+        if host_whitelist and not any(h in host for h in host_whitelist):
+            continue
+        if not link_pattern.search(full):
             continue
         if full in seen:
             continue
-        # Walk up to gather a meaningful title (anchor text can be empty/image)
+        # Build a title candidate by walking up the DOM
         context = _strip(a.get_text())
         title = context
         node = a
@@ -594,9 +689,6 @@ async def scrape_israelhayom_eilat(client: httpx.AsyncClient) -> List[Dict[str, 
             if len(t) > len(title):
                 title = t
             node = node.parent
-        if not title or len(title) < 8:
-            continue
-        # Prefer h1/h2/h3 within anchor's context
         for tag_name in ("h2", "h3", "h1"):
             el = a.find(tag_name) or (a.parent.find(tag_name) if a.parent else None)
             if el:
@@ -604,6 +696,11 @@ async def scrape_israelhayom_eilat(client: httpx.AsyncClient) -> List[Dict[str, 
                 if tt and len(tt) >= 8:
                     title = tt
                     break
+        if not title or len(title) < 8:
+            continue
+        if require_eilat_in_context:
+            if not (_contains_eilat(title) or _contains_eilat(context)):
+                continue
         img_tag = a.find("img")
         img = img_tag.get("src") if img_tag else None
         if img and img.startswith("//"):
@@ -612,20 +709,82 @@ async def scrape_israelhayom_eilat(client: httpx.AsyncClient) -> List[Dict[str, 
         out.append(
             _make_article(
                 title=title[:250],
-                summary=context[:300],
-                content_html=f'<p>{title}</p><p><a href="{full}">קרא את הכתבה המלאה בישראל היום</a></p>',
+                summary=context[:300] if context else title,
+                content_html=f'<p>{title}</p><p><a href="{full}">קרא את הכתבה המלאה ב-{source_name}</a></p>',
                 image=img,
-                source_name="ישראל היום",
+                source_name=source_name,
                 source_url=full,
                 published_at=None,
                 source_type="news",
             )
         )
-        if len(out) >= 25:
+        if len(out) >= max_items:
             break
-    # Enrich with real publish dates
-    await _enrich_dates(client, out, use_browser=False, concurrency=5)
+    await _enrich_dates(client, out, use_browser=enrich_use_browser, concurrency=4)
     return out
+
+
+async def scrape_israelhayom_eilat(client: httpx.AsyncClient) -> List[Dict[str, Any]]:
+    return await _scrape_tag_page(
+        client,
+        tag_url="https://www.israelhayom.co.il/tag/%D7%90%D7%99%D7%9C%D7%AA",
+        source_name="ישראל היום",
+        base_host="israelhayom.co.il",
+        link_pattern=re.compile(r"israelhayom\.co\.il/.+/article/\d+"),
+        host_whitelist=["israelhayom.co.il"],
+        max_items=25,
+    )
+
+
+async def scrape_maariv_eilat(client: httpx.AsyncClient) -> List[Dict[str, Any]]:
+    return await _scrape_tag_page(
+        client,
+        tag_url="https://www.maariv.co.il/tags/%D7%90%D7%99%D7%9C%D7%AA",
+        source_name="מעריב",
+        base_host="maariv.co.il",
+        link_pattern=re.compile(r"maariv\.co\.il/.+/article-\d+"),
+        host_whitelist=["maariv.co.il"],
+        max_items=25,
+    )
+
+
+async def scrape_globes_eilat(client: httpx.AsyncClient) -> List[Dict[str, Any]]:
+    return await _scrape_tag_page(
+        client,
+        tag_url="https://www.globes.co.il/news/%D7%90%D7%99%D7%9C%D7%AA.tag",
+        source_name="גלובס",
+        base_host="globes.co.il",
+        link_pattern=re.compile(r"globes\.co\.il/news/article\.aspx\?did=\d+"),
+        host_whitelist=["globes.co.il"],
+        max_items=25,
+    )
+
+
+async def scrape_davar_eilat(client: httpx.AsyncClient) -> List[Dict[str, Any]]:
+    # Davar blocks httpx → use Playwright for listing + enrichment
+    return await _scrape_tag_page(
+        client,
+        tag_url="https://www.davar1.co.il/topic/%D7%90%D7%99%D7%9C%D7%AA/",
+        source_name="דבר",
+        base_host="davar1.co.il",
+        link_pattern=re.compile(r"davar1\.co\.il/\d+/?$|davar1\.co\.il/update/\d+"),
+        host_whitelist=["davar1.co.il"],
+        max_items=25,
+        use_browser=True,
+        enrich_use_browser=True,
+    )
+
+
+async def scrape_walla_eilat(client: httpx.AsyncClient) -> List[Dict[str, Any]]:
+    return await _scrape_tag_page(
+        client,
+        tag_url="https://tags.walla.co.il/%D7%90%D7%99%D7%9C%D7%AA",
+        source_name="וואלה",
+        base_host="walla.co.il",
+        link_pattern=re.compile(r"(news|travel|mekomi|sport|tech|finance|b)\.walla\.co\.il/item/\d+"),
+        host_whitelist=["walla.co.il"],
+        max_items=25,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -965,6 +1124,10 @@ SCRAPERS = [
     ("mako_eilat", scrape_mako_eilat),
     ("kan_eilat", scrape_kan_eilat),
     ("israelhayom_eilat", scrape_israelhayom_eilat),
+    ("maariv_eilat", scrape_maariv_eilat),
+    ("globes_eilat", scrape_globes_eilat),
+    ("davar_eilat", scrape_davar_eilat),
+    ("walla_eilat", scrape_walla_eilat),
     ("facebook_eilat_muni", scrape_facebook_eilat_muni),
 ]
 
