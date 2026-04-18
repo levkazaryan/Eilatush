@@ -12,6 +12,10 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Literal, Any, Dict
 from datetime import datetime, timedelta, timezone
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+from scrapers import run_all_scrapers
+
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
@@ -176,10 +180,29 @@ async def get_jobs(urgency: Optional[str] = None, category: Optional[str] = None
 async def get_news(source: Optional[str] = None):
     query: Dict[str, Any] = {}
     if source:
-        query["source"] = source
+        # source filter now maps to source_type (news/alert/event)
+        query["source_type"] = source
     docs = await db.news.find(query, {"_id": 0}).to_list(500)
-    docs.sort(key=lambda d: d["published_at"], reverse=True)
+    docs.sort(key=lambda d: d.get("published_at") or d.get("fetched_at") or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    # strip heavy content_html from list response
+    for d in docs:
+        d.pop("content_html", None)
     return docs
+
+
+@api_router.get("/news/{article_id}")
+async def get_news_article(article_id: str):
+    doc = await db.news.find_one({"id": article_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Article not found")
+    return doc
+
+
+@api_router.post("/news/refresh")
+async def refresh_news_now():
+    """Manual trigger to run scrapers immediately."""
+    count = await _run_scrape_job()
+    return {"fetched": count}
 
 # --------- Eilatush AI ---------
 
@@ -663,58 +686,8 @@ async def seed_data():
         await db.jobs.insert_many(jobs)
 
     # --- News ---
-    if await db.news.count_documents({}) == 0:
-        news = [
-            {
-                "id": str(uuid.uuid4()),
-                "title": "עיריית אילת: שיפוץ הטיילת הצפונית יסתיים החודש",
-                "summary": "העירייה הודיעה על סיום שיפוץ הטיילת הצפונית בסוף החודש, כולל הוספת תאורת לד חדשה ועמדות מים נגישות.",
-                "source": "municipality",
-                "image": "https://images.unsplash.com/photo-1578626574897-2e9c35e1ea29?crop=entropy&cs=srgb&fm=jpg&w=800",
-                "published_at": now - timedelta(hours=3),
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "title": "סופ\"ש חם במיוחד – 41 מעלות צפויות בשבת",
-                "summary": "אזהרת חום קיצוני. הציבור מתבקש להימנע משהייה בשמש בין 11:00-16:00 ולשתות הרבה מים.",
-                "source": "alert",
-                "image": "https://images.unsplash.com/photo-1549366970-6b64335a55cb?crop=entropy&cs=srgb&fm=jpg&w=800",
-                "published_at": now - timedelta(hours=6),
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "title": "פסטיבל הג'אז של אילת יוצא לדרך בעוד שבועיים",
-                "summary": "האמנים המובילים של ישראל יופיעו במשך שלושה ימים בחוף הדקל. הכרטיסים במכירה מוקדמת.",
-                "source": "event",
-                "image": "https://images.unsplash.com/photo-1740432276173-7a0e546e26cf?crop=entropy&cs=srgb&fm=jpg&w=800",
-                "published_at": now - timedelta(hours=12),
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "title": "קו אוטובוס חדש בין שכונת שחמון למרכז העיר",
-                "summary": "קו 15 יתחיל לפעול מיום ראשון הבא. תדירות כל 20 דקות בשעות השיא.",
-                "source": "municipality",
-                "image": "https://images.unsplash.com/photo-1578626574897-2e9c35e1ea29?crop=entropy&cs=srgb&fm=jpg&w=800",
-                "published_at": now - timedelta(days=1),
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "title": "פתיחת גן ציבורי חדש ברובע 6",
-                "summary": "הגן כולל מגרש משחקים, פינת כושר ומסלול ריצה. טקס הפתיחה יתקיים ביום שישי.",
-                "source": "municipality",
-                "image": "https://images.unsplash.com/photo-1549366970-6b64335a55cb?crop=entropy&cs=srgb&fm=jpg&w=800",
-                "published_at": now - timedelta(days=2),
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "title": "מבצע חברתי: תרומות קיץ לקשישי העיר",
-                "summary": "מרכז הקהילה אוסף מאווררים ומזגנים ניידים לחלוקה לאזרחים ותיקים. נקודות איסוף ברחבי העיר.",
-                "source": "event",
-                "image": "https://images.unsplash.com/photo-1578626574897-2e9c35e1ea29?crop=entropy&cs=srgb&fm=jpg&w=800",
-                "published_at": now - timedelta(days=3),
-            },
-        ]
-        await db.news.insert_many(news)
+    # Demo news is NOT seeded. News comes only from real scrapers (run_all_scrapers).
+    # This keeps the `news` collection strictly sourced from user-approved websites.
 
     logger.info("Seed complete")
 
@@ -739,7 +712,56 @@ logger = logging.getLogger(__name__)
 @app.on_event("startup")
 async def on_startup():
     await seed_data()
+    # Clear legacy demo news once (ids are UUID format). Real scraped articles
+    # have deterministic sha1-based ids of 20 hex chars.
+    try:
+        await db.news.delete_many({"id": {"$not": {"$regex": "^[a-f0-9]{20}$"}}})
+    except Exception:
+        pass
+    # start scheduler + kick off first scrape in background
+    _start_scheduler()
+    import asyncio
+    asyncio.create_task(_run_scrape_job())
+
+
+async def _run_scrape_job() -> int:
+    logger.info("news scrape job starting…")
+    try:
+        articles = await run_all_scrapers()
+    except Exception as e:
+        logger.exception("scrape job failed: %s", e)
+        return 0
+    if not articles:
+        logger.warning("scrape job produced 0 articles")
+        return 0
+    # upsert by id (sha1 of source_url)
+    count = 0
+    for a in articles:
+        await db.news.update_one({"id": a["id"]}, {"$set": a}, upsert=True)
+        count += 1
+    # After a successful scrape, purge any remaining non-scraped demo items
+    try:
+        await db.news.delete_many({"source_url": {"$exists": False}})
+    except Exception:
+        pass
+    logger.info("news scrape job done: %d articles upserted", count)
+    return count
+
+
+def _start_scheduler():
+    scheduler = AsyncIOScheduler(timezone="UTC")
+    scheduler.add_job(_run_scrape_job, "interval", hours=1, id="news_hourly", replace_existing=True)
+    scheduler.start()
+    app.state.scheduler = scheduler
+    logger.info("scheduler started (news every 1h)")
+
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    sch = getattr(app.state, "scheduler", None)
+    if sch:
+        try:
+            sch.shutdown(wait=False)
+        except Exception:
+            pass
     client.close()

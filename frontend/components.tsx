@@ -53,6 +53,10 @@ export type NewsT = {
   title: string;
   summary: string;
   source: string;
+  source_name?: string;
+  source_url?: string;
+  source_type?: "news" | "alert" | "event";
+  content_html?: string;
   image?: string;
   published_at: string;
 };
@@ -281,25 +285,41 @@ export function JobCard({ item }: { item: JobT }) {
   );
 }
 
-export function NewsCard({ item }: { item: NewsT }) {
+export function NewsCard({ item, onPress, onSourcePress }: { item: NewsT; onPress?: () => void; onSourcePress?: () => void }) {
+  const stype = item.source_type || item.source || "news";
   const color =
-    item.source === "alert" ? COLORS.primary : item.source === "municipality" ? COLORS.secondary : COLORS.textSecondary;
+    stype === "alert" ? COLORS.primary : stype === "event" ? COLORS.secondary : COLORS.accent;
+  const srcLabel = item.source_name || sourceLabel[stype] || stype;
   return (
-    <View style={styles.newsCard} testID={`news-card-${item.id}`}>
-      {item.image && <Image source={{ uri: item.image }} style={styles.newsImage} />}
+    <TouchableOpacity activeOpacity={0.85} onPress={onPress} style={styles.newsCard} testID={`news-card-${item.id}`}>
+      {item.image ? <Image source={{ uri: item.image }} style={styles.newsImage} /> : null}
       <View style={styles.newsBody}>
         <View style={styles.sourceRow}>
-          <View style={[styles.sourceBadge, { borderColor: color }]}>
-            <Text style={[styles.sourceText, { color }]}>{sourceLabel[item.source] || item.source}</Text>
-          </View>
+          <Pressable
+            onPress={(e: any) => {
+              e?.stopPropagation?.();
+              onSourcePress?.();
+            }}
+            style={[styles.sourceBadge, { borderColor: color }]}
+            testID={`news-source-${item.id}`}
+          >
+            <Ionicons name="open-outline" size={10} color={color} style={{ marginEnd: 4 }} />
+            <Text style={[styles.sourceText, { color }]} numberOfLines={1}>
+              {srcLabel}
+            </Text>
+          </Pressable>
           <Text style={styles.newsDate}>{formatHebrewTime(item.published_at)}</Text>
         </View>
         <Text style={styles.newsTitle}>{item.title}</Text>
         <Text style={styles.newsSummary} numberOfLines={3}>
           {item.summary}
         </Text>
+        <View style={styles.readMoreRow}>
+          <Text style={styles.readMoreText}>קרא עוד</Text>
+          <Ionicons name="chevron-back" size={16} color={COLORS.primary} />
+        </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -583,11 +603,21 @@ const styles = StyleSheet.create({
   newsImage: { width: "100%", height: 140 },
   newsBody: { padding: SPACING.md },
   sourceRow: { flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
-  sourceBadge: { borderWidth: 1, paddingHorizontal: 8, paddingVertical: 2, borderRadius: RADIUS.sm },
+  sourceBadge: {
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADIUS.sm,
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    maxWidth: "70%",
+  },
   sourceText: { fontSize: 11, fontWeight: "900", letterSpacing: 0.4 },
   newsDate: { color: COLORS.textMuted, fontSize: 11 },
   newsTitle: { color: COLORS.textPrimary, fontSize: 16, fontWeight: "900", textAlign: "right", writingDirection: "rtl" },
   newsSummary: { color: COLORS.textSecondary, fontSize: 13, marginTop: 6, lineHeight: 20, textAlign: "right", writingDirection: "rtl" },
+  readMoreRow: { flexDirection: "row-reverse", alignItems: "center", marginTop: 10, gap: 4 },
+  readMoreText: { color: COLORS.primary, fontSize: 13, fontWeight: "700" },
 
   // Section
   sectionTitle: { color: COLORS.textPrimary, fontSize: 22, fontWeight: "900", textAlign: "right", writingDirection: "rtl" },

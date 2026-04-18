@@ -43,10 +43,20 @@ A local utility mobile app for Eilat (Israel) residents. Answers the daily quest
 
 ## Roadmap (not in MVP)
 - Admin panel to manage content (events/businesses/jobs/news)
-- Official website scraper → auto-ingest from municipality, local event pages
+- **Facebook integration for Eilat.Muni page** — requires Meta Graph API Page Access Token (pending approval from municipality + Meta). Scraper scaffold exists; will activate once token is provided.
 - Push notifications
 - Smart Matching ("start now" jobs notified to nearby users)
 - Tourist mode (English)
+
+## News Auto-Ingestion (added)
+- 15 approved source URLs (eilat.muni.il, eilat.city, eilatport.co.il, icemalleilat.co.il, biz.eilat.muni.il, smarticket events, ynet Eilat topic, mako Eilat tag, sba.org.il course, tiuli, gov.il, parks.org.il, yomyom.net, kan.org.il, facebook.com/Eilat.Muni). Sources that block scraping (403) are skipped silently — logged in backend.
+- APScheduler runs `run_all_scrapers` every hour in the background; also once on startup.
+- Each article saved with sha1(source_url) as stable id → idempotent upserts.
+- Demo news removed on first successful scrape.
+- Listing endpoint `/api/news` strips `content_html` for fast listing; detail endpoint `/api/news/{id}` returns full content.
+- Manual trigger: `POST /api/news/refresh`.
+- Article detail screen parses HTML → extracts images + paragraphs for clean in-app reading.
+- Source badge above every article (clickable) + bottom CTA "קרא את הכתבה המלאה במקור" → opens the original link (legally required attribution).
 
 ## Business Enhancement (Smart Default)
 Added automatic "open now" computation to business cards and Claude-powered intent routing so the home screen always shows actionable content — a key driver of daily active usage (the "trigger loop" described in the vision). Deal badges and urgency pills make revenue-ready surfaces for featured/promoted listings on day one.

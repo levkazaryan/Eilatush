@@ -1,14 +1,15 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, RefreshControl, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { api } from "../../api";
+import { useRouter } from "expo-router";
+import { api, openLink } from "../../api";
 import { COLORS, SPACING } from "../../theme";
 import { NewsCard, NewsT, FilterChip, EmptyState } from "../../components";
 
 const SOURCES: { key: string; label: string }[] = [
   { key: "", label: "הכל" },
-  { key: "municipality", label: "עירייה" },
-  { key: "alert", label: "התראות" },
+  { key: "news", label: "חדשות" },
+  { key: "alert", label: "מבזקים" },
   { key: "event", label: "אירועים" },
 ];
 
@@ -17,6 +18,7 @@ export default function NewsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [source, setSource] = useState("");
+  const router = useRouter();
 
   const load = useCallback(async () => {
     try {
@@ -44,8 +46,10 @@ export default function NewsScreen() {
   return (
     <SafeAreaView style={styles.root} edges={["top"]}>
       <View style={styles.header}>
-        <Text style={styles.screenTitle}>חדשות מקומיות</Text>
-        <Text style={styles.screenSub}>עדכונים רשמיים · בלי רעש · בלי ספאם</Text>
+        <Text style={styles.screenTitle}>חדשות מאילת</Text>
+        <Text style={styles.screenSub}>
+          {list.length > 0 ? `${list.length} כתבות · מתעדכן אוטומטית כל שעה` : "עדכונים מהמקורות הרשמיים"}
+        </Text>
       </View>
 
       <View style={styles.chipsRow}>
@@ -71,9 +75,16 @@ export default function NewsScreen() {
             <ActivityIndicator color={COLORS.primary} />
           </View>
         ) : list.length === 0 ? (
-          <EmptyState title="אין מבזקים" subtitle="חזרו מאוחר יותר" icon="newspaper-outline" />
+          <EmptyState title="אין חדשות" subtitle="נסה לרענן או לבחור קטגוריה אחרת" icon="newspaper-outline" />
         ) : (
-          list.map((n) => <NewsCard key={n.id} item={n} />)
+          list.map((n) => (
+            <NewsCard
+              key={n.id}
+              item={n}
+              onPress={() => router.push(`/article/${n.id}`)}
+              onSourcePress={() => n.source_url && openLink(n.source_url)}
+            />
+          ))
         )}
       </ScrollView>
     </SafeAreaView>
