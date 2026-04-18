@@ -1190,8 +1190,11 @@ FULL_SITE_SOURCES = [
     ("https://eilatport.co.il/", "נמל אילת", "news", None, None, 40, False, False),
     ("https://icemalleilat.co.il/", "אייס מול אילת", "event", None, None, 40, False, False),
     ("https://biz.eilat.muni.il/", "עסקים — עיריית אילת", "news", None, None, 40, False, False),
-    # יום יום (regional) — exclude category listing pages (ShowCat.asp = "places", not articles)
-    ("https://www.yomyom.net/", "יום יום", "news", None, [r"(?i)showcat\.asp"], 40, True, False),
+    # יום יום (regional) — exclude category listing pages (ShowCat.asp = "places")
+    # and magazine/PDF bookshelf pages (vmag/mag subdomains) which aren't articles.
+    ("https://www.yomyom.net/", "יום יום", "news", None,
+        [r"(?i)showcat\.asp", r"(?i)://(v?mag|pdf|magazine)\.", r"(?i)/bookcase/"],
+        40, True, False),
     # Ynet / Mako / Kan / Israel Hayom / Maariv / Globes / Davar / Walla:
     # handled by dedicated tag scrapers (SCRAPERS list)
     # eilat.city removed — pure tourism portal, no real news articles
