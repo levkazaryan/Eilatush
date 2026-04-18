@@ -109,7 +109,13 @@ export default function ArticleScreen() {
     })();
   }, [id]);
 
-  const blocks = useMemo(() => parseHtmlToBlocks(article?.content_html || ""), [article]);
+  const firstParagraph = useMemo(() => {
+    const b = parseHtmlToBlocks(article?.content_html || "");
+    const textBlock = b.find((x) => x.kind === "text" && (x as any).text && (x as any).text.length > 40) as
+      | { kind: "text"; text: string }
+      | undefined;
+    return textBlock?.text || "";
+  }, [article]);
 
   return (
     <SafeAreaView style={styles.root} edges={["top"]}>
@@ -154,28 +160,10 @@ export default function ArticleScreen() {
 
             {article.summary ? <Text style={styles.summary}>{article.summary}</Text> : null}
 
-            {blocks.length > 0 ? (
-              <View style={{ marginTop: SPACING.md }}>
-                {blocks.map((b, i) => {
-                  if (b.kind === "image") {
-                    return (
-                      <Image
-                        key={i}
-                        source={{ uri: b.url }}
-                        style={styles.inlineImage}
-                        resizeMode="cover"
-                      />
-                    );
-                  }
-                  const base = [styles.paragraph] as any[];
-                  if (b.level && b.level <= 3) base.push(styles.heading);
-                  return (
-                    <Text key={i} style={base} selectable>
-                      {b.text}
-                    </Text>
-                  );
-                })}
-              </View>
+            {firstParagraph ? (
+              <Text style={styles.paragraph} selectable>
+                {firstParagraph}
+              </Text>
             ) : null}
 
             <TouchableOpacity
@@ -184,12 +172,11 @@ export default function ArticleScreen() {
               testID="article-read-at-source"
             >
               <Ionicons name="open-outline" size={18} color="#fff" />
-              <Text style={styles.readAtSourceText}>קרא את הכתבה המלאה במקור</Text>
+              <Text style={styles.readAtSourceText}>קרא את הכתבה המלאה</Text>
             </TouchableOpacity>
 
             <Text style={styles.disclaimer}>
-              התוכן נלקח מ-{article.source_name || "המקור המקורי"} ומוצג כאן למען נוחות התושבים.
-              הקישור למקור המלא זמין מעל.
+              התוכן מתוך {article.source_name || "המקור המקורי"}. לקריאה מלאה — לחץ על הכפתור.
             </Text>
           </View>
         </ScrollView>

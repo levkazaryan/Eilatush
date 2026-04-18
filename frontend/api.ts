@@ -1,4 +1,5 @@
 import { Linking, Platform } from "react-native";
+import * as WebBrowser from "expo-web-browser";
 
 const API = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -63,7 +64,23 @@ export const openPhone = (phone?: string) => {
 
 export const openLink = (url?: string) => {
   if (!url) return;
-  Linking.openURL(url).catch(() => {});
+  if (Platform.OS === "web") {
+    // Web: open in new tab (can't use CustomTabs/SFSafariViewController)
+    window.open(url, "_blank", "noopener,noreferrer");
+    return;
+  }
+  // Native: open in-app browser (SFSafariViewController on iOS, Chrome Custom Tabs on Android)
+  WebBrowser.openBrowserAsync(url, {
+    toolbarColor: "#E63946",
+    controlsColor: "#FFFFFF",
+    dismissButtonStyle: "close",
+    readerMode: false,
+    enableBarCollapsing: true,
+    showTitle: true,
+  }).catch(() => {
+    // Fallback to system browser if WebBrowser fails
+    Linking.openURL(url).catch(() => {});
+  });
 };
 
 export const formatHebrewTime = (iso?: string | null): string => {
