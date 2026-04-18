@@ -59,14 +59,17 @@ function parseHtmlToBlocks(html: string): Block[] {
       }
       continue;
     }
-    // split text into paragraphs by block tags
-    const chunks = q.value.split(/<\/(p|div|h[1-6]|li|br)[^>]*>|<br\s*\/?>/gi);
+    // split text into paragraphs by block tags.
+    // NOTE: Use non-capturing groups (?:...) — capturing groups in split()
+    // cause the captured text ("div", "p" etc.) to appear as array entries!
+    const chunks = q.value.split(/<\/(?:p|div|h[1-6]|li|br)[^>]*>|<br\s*\/?>|<!--[\s\S]*?-->/gi);
     for (const c of chunks) {
       if (!c) continue;
       let level: number | undefined;
       const hMatch = /<h([1-6])[^>]*>/i.exec(c);
       if (hMatch) level = parseInt(hMatch[1], 10);
       const clean = c
+        .replace(/<!--[\s\S]*?-->/g, " ")
         .replace(/<[^>]+>/g, " ")
         .replace(/&nbsp;/g, " ")
         .replace(/&amp;/g, "&")
