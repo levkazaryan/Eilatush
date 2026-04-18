@@ -47,6 +47,30 @@ def _parse_date(val: Any) -> datetime:
         return datetime.now(timezone.utc)
 
 
+def _extract_date(asoup) -> datetime:
+    """Robust published-date extraction from common meta tags."""
+    candidates = [
+        asoup.find("meta", property="article:published_time"),
+        asoup.find("meta", property="og:article:published_time"),
+        asoup.find("meta", attrs={"itemprop": "datePublished"}),
+        asoup.find("meta", attrs={"name": "date"}),
+        asoup.find("meta", attrs={"name": "pubdate"}),
+        asoup.find("meta", attrs={"name": "publishdate"}),
+        asoup.find("meta", attrs={"name": "dcterms.issued"}),
+        asoup.find("meta", attrs={"name": "dc.date"}),
+        asoup.find("meta", attrs={"property": "article:modified_time"}),
+    ]
+    for c in candidates:
+        if c and c.get("content"):
+            d = _parse_date(c["content"])
+            if d:
+                return d
+    t = asoup.find("time")
+    if t:
+        return _parse_date(t.get("datetime") or t.get_text())
+    return datetime.now(timezone.utc)
+
+
 def _contains_eilat(text: str) -> bool:
     if not text:
         return False
@@ -66,6 +90,74 @@ async def _fetch(client: httpx.AsyncClient, url: str) -> Optional[str]:
     except Exception as e:
         log.warning("fetch failed %s: %s", url, e)
         return None
+
+
+# Cache a single Playwright browser per process — reused across fetches.
+_PW_CTX: Dict[str, Any] = {"browser": None, "pw": None, "lock": asyncio.Lock()}
+
+
+async def _pw_fetch(url: str) -> Optional[str]:
+    """Fetch a URL via headless Chromium. Used for sites that block httpx/bots
+    (kan, gov.il, tiuli, etc.). Renders JS and returns final HTML."""
+    try:
+        from playwright.async_api import async_playwright
+    except Exception as e:
+        log.warning("playwright not installed: %s", e)
+        return None
+    async with _PW_CTX["lock"]:
+        if _PW_CTX["browser"] is None:
+            try:
+                pw = await async_playwright().start()
+                browser = await pw.chromium.launch(
+                    headless=True,
+                    args=["--no-sandbox", "--disable-dev-shm-usage"],
+                )
+                _PW_CTX["pw"] = pw
+                _PW_CTX["browser"] = browser
+            except Exception as e:
+                log.warning("playwright launch failed: %s", e)
+                return None
+    browser = _PW_CTX["browser"]
+    context = None
+    try:
+        context = await browser.new_context(
+            user_agent=HEADERS["User-Agent"],
+            locale="he-IL",
+            viewport={"width": 1280, "height": 900},
+        )
+        page = await context.new_page()
+        try:
+            await page.goto(url, wait_until="domcontentloaded", timeout=25000)
+            # Wait for SPA content to hydrate — required for Kan, Gov.il, Tiuli
+            try:
+                await page.wait_for_load_state("networkidle", timeout=10000)
+            except Exception:
+                pass
+            await page.wait_for_timeout(3000)
+            html = await page.content()
+            return html
+        except Exception as e:
+            log.warning("pw nav failed %s: %s", url, e)
+            return None
+    except Exception as e:
+        log.warning("pw context failed %s: %s", url, e)
+        return None
+    finally:
+        if context is not None:
+            try:
+                await context.close()
+            except Exception:
+                pass
+
+
+async def _fetch_smart(client: httpx.AsyncClient, url: str, use_browser: bool = False) -> Optional[str]:
+    """Try fast httpx first; fall back to Playwright on failure or when use_browser=True."""
+    if not use_browser:
+        html = await _fetch(client, url)
+        if html:
+            return html
+    # use browser fallback
+    return await _pw_fetch(url)
 
 
 def _make_article(
@@ -479,14 +571,12 @@ async def scrape_site_articles(
     link_patterns: Optional[List[str]] = None,
     max_items: int = 15,
     require_eilat_keyword: bool = False,
+    use_browser: bool = False,
 ) -> List[Dict[str, Any]]:
-    """Scan a site's homepage, discover article links, fetch each and extract title/content.
-    Only follow links on the same domain. When require_eilat_keyword=True, pre-filters
-    links whose anchor text or parent context mentions Eilat (faster, more accurate
-    than fetching every article on a large national site like ynet/mako/gov.il).
-    Also post-filters each fetched article by Eilat keyword.
+    """Scan a site's homepage, discover article links, fetch each and extract content.
+    When use_browser=True, uses Playwright headless Chromium (for sites that block bots).
     """
-    html = await _fetch(client, base_url)
+    html = await _fetch_smart(client, base_url, use_browser=use_browser)
     if not html:
         return []
     soup = BeautifulSoup(html, "lxml")
@@ -539,7 +629,7 @@ async def scrape_site_articles(
     for url in candidates:
         if len(out) >= max_items:
             break
-        art = await _fetch(client, url)
+        art = await _fetch_smart(client, url, use_browser=use_browser)
         if not art:
             continue
         asoup = BeautifulSoup(art, "lxml")
@@ -590,10 +680,7 @@ async def scrape_site_articles(
             if not _contains_eilat(title + " " + summary + " " + body_text):
                 continue
 
-        pub = datetime.now(timezone.utc)
-        t = asoup.find("time")
-        if t:
-            pub = _parse_date(t.get("datetime") or t.get_text())
+        pub = _extract_date(asoup)
 
         if not summary:
             summary = body_text[:300] if body_text else title
@@ -642,22 +729,23 @@ SCRAPERS = [
 SINGLE_PAGE_SOURCES: List = []  # not used any longer — all sources are full-site
 
 # Full sites — scrape homepage + follow article links.
-# Format: (base_url, source_name, source_type, link_patterns, max_items, require_eilat_keyword)
+# Format: (base_url, source_name, source_type, link_patterns, max_items, require_eilat_keyword, use_browser)
 FULL_SITE_SOURCES = [
     # Eilat-only domains → no keyword filter (everything IS Eilat)
-    ("https://eilat.city/", "אילת סיטי", "news", None, 25, False),
-    ("https://eilatport.co.il/", "נמל אילת", "news", None, 20, False),
-    ("https://icemalleilat.co.il/", "אייס מול אילת", "event", None, 20, False),
-    ("https://biz.eilat.muni.il/", "עסקים — עיריית אילת", "news", None, 20, False),
-    # General / national domains → require Eilat keyword in link/context/body
-    ("https://www.ynet.co.il/", "Ynet", "news", None, 20, True),
-    ("https://mobile.mako.co.il/", "Mako", "news", None, 20, True),
-    ("https://www.kan.org.il/", "כאן חדשות", "news", None, 15, True),
-    ("https://www.tiuli.com/", "טיולי", "news", None, 15, True),
-    ("https://www.gov.il/", "ממשל ישראל", "news", None, 10, True),
-    ("https://www.sba.org.il/", "הסוכנות לעסקים קטנים", "news", None, 10, True),
-    ("https://www.parks.org.il/", "רשות הטבע והגנים", "news", None, 10, True),
-    ("https://www.yomyom.net/", "יום יום", "news", None, 15, True),
+    ("https://eilat.city/", "אילת סיטי", "news", None, 50, False, False),
+    ("https://eilatport.co.il/", "נמל אילת", "news", None, 40, False, False),
+    ("https://icemalleilat.co.il/", "אייס מול אילת", "event", None, 40, False, False),
+    ("https://biz.eilat.muni.il/", "עסקים — עיריית אילת", "news", None, 40, False, False),
+    # General / national domains — filter by Eilat keyword
+    ("https://www.ynet.co.il/", "Ynet", "news", None, 40, True, False),
+    ("https://mobile.mako.co.il/", "Mako", "news", None, 40, True, False),
+    ("https://www.yomyom.net/", "יום יום", "news", None, 40, True, False),
+    ("https://www.sba.org.il/", "הסוכנות לעסקים קטנים", "news", None, 25, True, False),
+    ("https://www.parks.org.il/", "רשות הטבע והגנים", "news", None, 25, True, False),
+    # Sites that block httpx/bots — use headless browser (Playwright)
+    ("https://www.kan.org.il/", "כאן חדשות", "news", None, 25, True, True),
+    ("https://www.tiuli.com/", "טיולי", "news", None, 25, True, True),
+    ("https://www.gov.il/", "ממשל ישראל", "news", None, 25, True, True),
 ]
 
 LISTING_FILTERED_SOURCES: List = []  # merged into FULL_SITE_SOURCES above
@@ -682,7 +770,7 @@ async def run_all_scrapers() -> List[Dict[str, Any]]:
             except Exception as e:
                 log.exception("single %s failed: %s", src, e)
 
-        for url, src, stype, patterns, max_items, req_eilat in FULL_SITE_SOURCES:
+        for url, src, stype, patterns, max_items, req_eilat, use_browser in FULL_SITE_SOURCES:
             try:
                 items = await scrape_site_articles(
                     client,
@@ -692,6 +780,7 @@ async def run_all_scrapers() -> List[Dict[str, Any]]:
                     link_patterns=patterns,
                     max_items=max_items,
                     require_eilat_keyword=req_eilat,
+                    use_browser=use_browser,
                 )
                 log.info("full-site %s → %d articles", src, len(items))
                 all_articles.extend(items)
