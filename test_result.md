@@ -102,20 +102,80 @@
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
 
-user_problem_statement: "Build the Jobs page of the Eilatush app with (1) AI-categorized subject filter via dropdown, (2) date-uploaded filter, (3) more useful filter dimensions (job_type, experience, source), (4) dedup across sources, (5) hourly auto-scrape from 3+ approved Eilat job boards (eilatjobs.com, jobmaster.co.il, yomyom.net)."
+user_problem_statement: "Build the Businesses & Professionals section of the Eilatush app. Scrape real Eilat data (no paid APIs): eilat.city for businesses (1 image each), yomyom.net for professionals (OCR on flyers, 0 required images). AI-categorize with Claude Sonnet 4.5, dedup across sources, weekly refresh. Expose filter/toggle between 'עסקים' and 'אנשי מקצוע' in the UI."
 
 backend:
-  - task: "Yomyom OCR — real job titles from image flyers"
+  - task: "Businesses & Professionals scraper package (eilat.city + yomyom pros OCR)"
     implemented: true
     working: true
-    file: "/app/backend/jobs/sources/yomyom_jobs.py"
+    file: "/app/backend/businesses/"
     stuck_count: 0
     priority: "high"
     needs_retesting: false
     status_history:
         -working: true
         -agent: "main"
-        -comment: "User reported yomyom titles were generic ('משרה בלוח יום-יום אילת #1'). Installed tesseract-ocr + hebrew traineddata + pytesseract. Pipeline: download flyer image → Hebrew OCR → pass garbled OCR text to Claude Sonnet 4.5 for title/company/description extraction → fallback heuristic (longest Hebrew line) if LLM unavailable. Titles now correctly show 'עובדי/ות חנות סופר-פארם' (סופר-פארם), 'עובד/ת לדירות אלמוגים' (אלמוגים), 'פקיד/ה קבלה במלון' (מלון קומפורט אילת), 'דרושים/ות עובדים למלון' (Atlas Hotels), etc. Tags auto-applied based on real content (hotels/cleaning/etc.)."
+        -comment: "New /app/backend/businesses/ module mirroring jobs/ architecture. eilat_city.py iterates 17 /list/<category> pages × 4 pages each, extracts .c-media-object cards, follows each to detail page for phone/address/opening-hours/description. Returned 796 real Eilat businesses across 17 categories. yomyom_pros.py reuses the tesseract+Claude pipeline from yomyom_jobs.py but with a system prompt geared for service providers — returned 11 professionals from article 61445 (builder, mover, plumber, handyman ads). Registry orchestrates + dedupes by fingerprint (normalized name + last 7 phone digits) separately per type. Totals after first run: 796 businesses + 11 professionals = 807 upserts."
+
+  - task: "Businesses AI categorizer (21 business + 23 professional slugs via Claude Sonnet 4.5)"
+    implemented: true
+    working: true
+    file: "/app/backend/businesses/categorizer.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "main"
+        -comment: "Two parallel taxonomies: BUSINESS_CATEGORIES (restaurants/cafes/bars/attractions/hotels/spa/beauty/fashion/jewelry/electronics/appliances/phones/home/supermarket/shopping_center/travel/transport/marine/consulate/services_biz, 21 slugs) and PROFESSIONAL_CATEGORIES (construction/electrician/plumber/ac/appliance_fix/carpentry/sealing/cleaning_pro/gardening/moving/locksmith/pest/auto_repair/tutor/therapy/health_pro/lawyer/accountant/tech_pro/graphics/photo/events_pro/beauty_home, 23 slugs). tag_records_batch routes by record.type. Scraper hints (e.g., category-slug 'restaurants') seed initial tags so first-run LLM load is reduced."
+
+  - task: "Businesses API: /api/businesses (filtered), /businesses/categories, /businesses/sources, /businesses/status, /businesses/refresh, /businesses/{id}"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "main"
+        -comment: "Replaced old demo-seeded /api/businesses endpoint. New endpoint supports type=business|professional, category (csv), source (csv), q, open_now, limit. /businesses/categories returns taxonomy + live counts (type-aware). /businesses/sources returns per-source counts. /businesses/status reports last_updated_at + totals for each type. /businesses/{id} returns single record with open_now computed. Startup purges legacy demo businesses (no fingerprint). Scheduler runs weekly (APScheduler days=7). First scrape kicked off in startup background task. Verified via curl: total=807, tags populated, Hebrew content, phones normalized to +972 format."
+        -working: true
+        -agent: "testing"
+        -comment: "Comprehensive backend tests executed via /app/backend_test.py against public URL https://eilat-connect.preview.emergentagent.com. 76/77 assertions passed. /api/businesses default returns 500 records (hit default limit=500) of 796 total, all type=business, sorted by name asc, all phones start with +972, all have fingerprint, Hebrew content in 500/500 names, tags always array. ?type=professional → exactly 11 records, all type=professional. ?category=restaurants → 100 items all containing 'restaurants' tag. ?category=restaurants,cafes → 135 union items. ?source=eilat_city → 500 (capped by limit) all source=eilat_city. ?q=סושי → 18 Hebrew matches in name/subtitle/description/address/tags. ?open_now=true → 494 items, all open_now==True. ?limit=5 → 5 items. /businesses/categories?type=business returns LIST of 22 items: first is {slug:'all', label:'הכל', count:796}, other 21 slugs exactly match the expected taxonomy. Counts: restaurants=100, cafes=35, fashion=100, attractions=104, bars=18, hotels=0 (hotels count is 0 in tags — AI didn't tag any with 'hotels' slug; functional but main may want to review). /businesses/categories?type=professional returns 24 items, 23 pro slugs all present. /businesses/sources?type=business → [{source:eilat_city, source_name:'אילת+', count:796}]. /businesses/sources?type=professional → [{source:yomyom_pros, source_name:'יום-יום אילת', count:11}]. /businesses/status → {last_updated_at:'2026-04-19T17:28:58.785000', total_businesses:796, total_professionals:11}. /businesses/{id} → 200 with open_now bool, tags array, fingerprint. Invalid id → 404. POST /businesses/refresh is registered in OpenAPI (confirmed). Sanity APIs: /api/news returns 167 articles, /api/jobs returns 130, /api/events returns 200. No regressions."
+
+frontend:
+  - task: "Businesses UI — toggle עסקים/אנשי מקצוע + new taxonomy filters"
+    implemented: false
+    working: "NA"
+    file: "/app/frontend/app/(tabs)/businesses.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Phase 2 — pending. Existing screen still uses old category slugs (restaurant/bar/cafe...) which don't exist in the new data, so filters currently show 0 results in every chip except 'הכל'. Plan: segmented toggle at top between 'עסקים' / 'אנשי מקצוע'; multi-select category chips fed by /api/businesses/categories; cards with image (biz) or avatar placeholder (pros); internal detail screen /business/[id]."
+
+metadata:
+  created_by: "main_agent"
+  version: "1.3"
+  test_sequence: 4
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Businesses & Professionals scraper package (eilat.city + yomyom pros OCR)"
+    - "Businesses API: /api/businesses (filtered), /businesses/categories, /businesses/sources, /businesses/status, /businesses/refresh, /businesses/{id}"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    -agent: "main"
+    -message: "Phase 1 (backend) of Businesses/Professionals shipped. 807 real records scraped on first run (796 eilat.city + 11 yomyom pros). Architecture mirrors jobs/ (base/registry/categorizer/sources). Dedup runs per-type. Weekly APScheduler job. OLD test_businesses.py expects seeded demo data with 'restaurant'/'bar' categories + rating field — those tests are now stale and will fail; they test an obsolete schema and should be rewritten to match the new /businesses?type=... endpoint. Request backend testing of the new endpoints (list/filter/categories/sources/status/{id}) before Phase 2 (UI) work."
+    -agent: "testing"
+    -message: "Backend testing complete for Businesses & Professionals endpoints. 76/77 assertions passed in /app/backend_test.py (executed against https://eilat-connect.preview.emergentagent.com). All 3 focus tasks are ✅ WORKING: (1) scraper package produced 796 biz + 11 pros with fingerprint/type/tags/open_hours/+972 phones; (2) AI categorizer taxonomy returns exactly 21 business + 23 professional slugs matching spec with live counts (restaurants=100, cafes=35, fashion=100, attractions=104, bars=18); (3) all 6 /api/businesses* routes behave correctly (list with type/category/source/q/open_now/limit filters, categories list with 'all' first entry, sources with eilat_city '+אילת' / yomyom_pros 'יום-יום אילת', status, get-by-id 200 + invalid-id 404, POST /refresh registered in OpenAPI — not invoked due to 3-4min OCR cost). Sanity check: /api/news=167 articles, /api/jobs=130, /api/events=200. NO regressions. Minor observation (non-blocking): 'hotels' category count is 0 (AI didn't tag any record with the 'hotels' slug); main may want to review categorizer prompt or hint mapping if hotel listings are expected. Note: /app/backend/tests/test_businesses.py was skipped per instructions — it tests the obsolete schema and is stale."
 
   - task: "Multi-select filters (category, job_type, experience, source)"
     implemented: true

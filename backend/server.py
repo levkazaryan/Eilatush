@@ -16,6 +16,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from scrapers import run_all_scrapers
 from jobs import run_all_job_scrapers
+from businesses import run_all_business_scrapers
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -146,23 +147,132 @@ async def get_events(band: Optional[str] = None, category: Optional[str] = None)
         d["band"] = _time_band(d["starts_at"])
     return docs
 
+def _split_csv(val: Optional[str]) -> List[str]:
+    if not val:
+        return []
+    return [v for v in (s.strip() for s in val.split(",")) if v]
+
+
 @api_router.get("/businesses")
-async def get_businesses(category: Optional[str] = None, open_now: Optional[bool] = None, q: Optional[str] = None):
+async def get_businesses(
+    type: Optional[str] = None,       # "business" | "professional" (default = business)
+    category: Optional[str] = None,   # comma-separated slugs
+    source: Optional[str] = None,     # comma-separated source slugs
+    q: Optional[str] = None,
+    open_now: Optional[bool] = None,
+    limit: int = 500,
+):
     query: Dict[str, Any] = {}
-    if category:
-        query["category"] = category
+    t = (type or "business").lower()
+    if t in ("business", "professional"):
+        query["type"] = t
+    cats = _split_csv(category)
+    if cats:
+        query["tags"] = {"$in": cats}
+    srcs = _split_csv(source)
+    if srcs:
+        query["source"] = {"$in": srcs}
     if q:
         query["$or"] = [
             {"name": {"$regex": q, "$options": "i"}},
+            {"subtitle": {"$regex": q, "$options": "i"}},
             {"description": {"$regex": q, "$options": "i"}},
+            {"address": {"$regex": q, "$options": "i"}},
             {"tags": {"$regex": q, "$options": "i"}},
         ]
-    docs = await db.businesses.find(query, {"_id": 0}).to_list(500)
+    docs = await db.businesses.find(query, {"_id": 0}).sort("name", 1).to_list(int(limit))
     for d in docs:
-        d["open_now"] = _is_open_now(d.get("open_hours", ""))
+        d.setdefault("tags", [])
+        d.setdefault("also_in", [])
+        d["open_now"] = _is_open_now(d.get("open_hours", "") or "")
     if open_now:
         docs = [d for d in docs if d["open_now"]]
     return docs
+
+
+@api_router.get("/businesses/categories")
+async def get_biz_categories(type: Optional[str] = None):
+    """Return the fixed taxonomy + counts per slug for businesses or professionals."""
+    try:
+        from businesses.categorizer import BUSINESS_CATEGORIES, PROFESSIONAL_CATEGORIES
+    except Exception:
+        BUSINESS_CATEGORIES, PROFESSIONAL_CATEGORIES = [], []
+
+    t = (type or "business").lower()
+    taxonomy = PROFESSIONAL_CATEGORIES if t == "professional" else BUSINESS_CATEGORIES
+
+    pipeline = [
+        {"$match": {"type": t, "tags": {"$ne": None}}},
+        {"$unwind": "$tags"},
+        {"$group": {"_id": "$tags", "count": {"$sum": 1}}},
+    ]
+    counts: Dict[str, int] = {}
+    try:
+        docs = await db.businesses.aggregate(pipeline).to_list(100)
+        for d in docs:
+            counts[d["_id"]] = d["count"]
+    except Exception:
+        pass
+    total = await db.businesses.count_documents({"type": t})
+    out = [{"slug": "all", "label": "הכל", "emoji": "🧾", "count": total}]
+    for c in taxonomy:
+        out.append({
+            "slug": c["slug"],
+            "label": c["label"],
+            "emoji": c["emoji"],
+            "count": counts.get(c["slug"], 0),
+        })
+    return out
+
+
+@api_router.get("/businesses/sources")
+async def get_biz_sources(type: Optional[str] = None):
+    match: Dict[str, Any] = {}
+    if type:
+        match["type"] = type
+    pipeline = [
+        {"$match": match},
+        {"$group": {"_id": {"src": "$source", "name": "$source_name"}, "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+    ]
+    docs = await db.businesses.aggregate(pipeline).to_list(100)
+    return [
+        {"source": d["_id"]["src"], "source_name": d["_id"].get("name") or d["_id"]["src"], "count": d["count"]}
+        for d in docs
+    ]
+
+
+@api_router.get("/businesses/status")
+async def get_biz_status():
+    last = await db.businesses.find_one(
+        {"fetched_at": {"$ne": None}},
+        sort=[("fetched_at", -1)],
+        projection={"_id": 0, "fetched_at": 1},
+    )
+    total_biz = await db.businesses.count_documents({"type": "business"})
+    total_pro = await db.businesses.count_documents({"type": "professional"})
+    return {
+        "last_updated_at": (last or {}).get("fetched_at"),
+        "total_businesses": total_biz,
+        "total_professionals": total_pro,
+    }
+
+
+@api_router.post("/businesses/refresh")
+async def refresh_businesses_now():
+    count = await _run_businesses_scrape()
+    return {"fetched": count}
+
+
+@api_router.get("/businesses/{biz_id}")
+async def get_business(biz_id: str):
+    doc = await db.businesses.find_one({"id": biz_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Business not found")
+    doc.setdefault("tags", [])
+    doc.setdefault("also_in", [])
+    doc["open_now"] = _is_open_now(doc.get("open_hours", "") or "")
+    return doc
 
 @api_router.get("/jobs")
 async def get_jobs(
@@ -643,177 +753,9 @@ async def seed_data():
         await db.events.insert_many(events)
 
     # --- Businesses ---
-    if await db.businesses.count_documents({}) == 0:
-        businesses = [
-            {
-                "id": str(uuid.uuid4()),
-                "name": "סושי סאן - אילת",
-                "category": "restaurant",
-                "description": "סושי טרי בעבודת יד, משלוחים עד הבית",
-                "image": "https://images.unsplash.com/photo-1549366970-6b64335a55cb?crop=entropy&cs=srgb&fm=jpg&w=800",
-                "address": "רחוב התמרים 15, אילת",
-                "phone": "+97286330011",
-                "whatsapp": "+972501112233",
-                "open_hours": "12:00-23:30",
-                "deal": "20% הנחה על הזמנה ראשונה באפליקציה",
-                "rating": 4.7,
-                "tags": ["סושי", "יפני", "משלוחים", "זול"],
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "name": "Skybar אילת",
-                "category": "bar",
-                "description": "בר גג עם נוף לים ולהרי אדום",
-                "image": "https://images.unsplash.com/photo-1578626574897-2e9c35e1ea29?crop=entropy&cs=srgb&fm=jpg&w=800",
-                "address": "טיילת הצפונית, אילת",
-                "phone": "+97286550044",
-                "whatsapp": "+972501112244",
-                "open_hours": "18:00-03:00",
-                "deal": "Happy Hour 18:00-20:00: 1+1",
-                "rating": 4.6,
-                "tags": ["בר", "קוקטיילים", "נוף", "גג"],
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "name": "קפה דקל",
-                "category": "cafe",
-                "description": "בית קפה שכונתי, ארוחות בוקר, קפה ספיישלטי",
-                "image": "https://images.unsplash.com/photo-1549366970-6b64335a55cb?crop=entropy&cs=srgb&fm=jpg&w=800",
-                "address": "שדרות התמרים 42",
-                "phone": "+97286112233",
-                "whatsapp": "+972501112255",
-                "open_hours": "07:00-20:00",
-                "deal": "ארוחת בוקר זוגית 89 ₪",
-                "rating": 4.5,
-                "tags": ["קפה", "ארוחת בוקר", "משפחתי"],
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "name": "פיצה טוסקנה",
-                "category": "restaurant",
-                "description": "פיצה איטלקית אותנטית בתנור אבן",
-                "image": "https://images.unsplash.com/photo-1549366970-6b64335a55cb?crop=entropy&cs=srgb&fm=jpg&w=800",
-                "address": "רחוב אילות 7",
-                "phone": "+97286664455",
-                "whatsapp": "+972501112266",
-                "open_hours": "12:00-23:00",
-                "deal": "פיצה משפחתית + שתייה 79 ₪",
-                "rating": 4.4,
-                "tags": ["פיצה", "איטלקי", "משפחות"],
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "name": "חומוס אליהו",
-                "category": "restaurant",
-                "description": "חומוס מיתולוגי של אילת, פתוח מוקדם",
-                "image": "https://images.unsplash.com/photo-1549366970-6b64335a55cb?crop=entropy&cs=srgb&fm=jpg&w=800",
-                "address": "שוק המסחרי הישן",
-                "phone": "+97286334455",
-                "open_hours": "08:00-15:00",
-                "deal": "מנת חומוס + פיתה + שתייה 35 ₪",
-                "rating": 4.8,
-                "tags": ["חומוס", "ישראלי", "זול", "בוקר"],
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "name": "סופר קינג אילת",
-                "category": "shop",
-                "description": "סופרמרקט 24/7 עם משלוחים",
-                "image": "https://images.unsplash.com/photo-1549366970-6b64335a55cb?crop=entropy&cs=srgb&fm=jpg&w=800",
-                "address": "מרכז מסחרי הנמל",
-                "phone": "+97286221100",
-                "whatsapp": "+972501112277",
-                "open_hours": "24h",
-                "deal": "משלוח חינם מעל 150 ₪",
-                "rating": 4.2,
-                "tags": ["סופר", "24/7", "משלוחים"],
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "name": "ספא הים האדום",
-                "category": "beauty",
-                "description": "ספא וטיפולי פנים בסגנון ים המלח",
-                "image": "https://images.unsplash.com/photo-1578626574897-2e9c35e1ea29?crop=entropy&cs=srgb&fm=jpg&w=800",
-                "address": "מלון רויאל ביץ'",
-                "phone": "+97286776655",
-                "whatsapp": "+972501112288",
-                "open_hours": "09:00-21:00",
-                "deal": "טיפול זוגי 40% הנחה",
-                "rating": 4.9,
-                "tags": ["ספא", "יופי", "זוגות"],
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "name": "Dive Eilat",
-                "category": "sport",
-                "description": "מרכז צלילה מוסמך PADI",
-                "image": "https://images.unsplash.com/photo-1549366970-6b64335a55cb?crop=entropy&cs=srgb&fm=jpg&w=800",
-                "address": "חוף הצלילה הדרומי",
-                "phone": "+97286445566",
-                "whatsapp": "+972501112299",
-                "open_hours": "08:00-18:00",
-                "deal": "חבילת מבוא לצלילה 350 ₪",
-                "rating": 4.7,
-                "tags": ["צלילה", "ים", "ספורט ימי"],
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "name": "המסבאה של אילת",
-                "category": "bar",
-                "description": "פאב אנגלי אמיתי, בירות מהחבית, משחקי ביליארד",
-                "image": "https://images.unsplash.com/photo-1578626574897-2e9c35e1ea29?crop=entropy&cs=srgb&fm=jpg&w=800",
-                "address": "מרינה, אילת",
-                "phone": "+97286880099",
-                "whatsapp": "+972501113300",
-                "open_hours": "17:00-02:00",
-                "deal": "כוס בירה שנייה 50% הנחה",
-                "rating": 4.3,
-                "tags": ["בר", "פאב", "בירה", "ביליארד"],
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "name": "בורגר באר",
-                "category": "restaurant",
-                "description": "המבורגרים גורמה ובירה מקומית",
-                "image": "https://images.unsplash.com/photo-1549366970-6b64335a55cb?crop=entropy&cs=srgb&fm=jpg&w=800",
-                "address": "רחוב ברקת 9",
-                "phone": "+97286990011",
-                "whatsapp": "+972501113311",
-                "open_hours": "12:00-00:00",
-                "deal": "המבורגר + צ'יפס + בירה 69 ₪",
-                "rating": 4.5,
-                "tags": ["המבורגר", "בשר", "בירה"],
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "name": "אופניים אילת",
-                "category": "service",
-                "description": "השכרת אופניים חשמליים וקורקינטים",
-                "image": "https://images.unsplash.com/photo-1549366970-6b64335a55cb?crop=entropy&cs=srgb&fm=jpg&w=800",
-                "address": "טיילת המרכזית",
-                "phone": "+97286112244",
-                "whatsapp": "+972501113322",
-                "open_hours": "08:00-22:00",
-                "deal": "יום שלם 79 ₪ במקום 120 ₪",
-                "rating": 4.4,
-                "tags": ["אופניים", "השכרה", "תיירות"],
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "name": "מספרה ויבה",
-                "category": "beauty",
-                "description": "מספרת גברים ונשים, תסרוקות מקצועיות",
-                "image": "https://images.unsplash.com/photo-1578626574897-2e9c35e1ea29?crop=entropy&cs=srgb&fm=jpg&w=800",
-                "address": "מרכז מסחרי הים",
-                "phone": "+97286223344",
-                "whatsapp": "+972501113333",
-                "open_hours": "09:00-20:00",
-                "deal": "תספורת + עיצוב זקן 80 ₪",
-                "rating": 4.6,
-                "tags": ["מספרה", "גברים", "נשים"],
-            },
-        ]
-        await db.businesses.insert_many(businesses)
+    # Demo businesses are NOT seeded. Businesses & professionals come only
+    # from real scrapers (run_all_business_scrapers). This keeps the
+    # `businesses` collection strictly sourced from user-approved websites.
 
     # --- Jobs ---
     # Demo jobs are NOT seeded. Jobs come only from real scrapers (run_all_job_scrapers).
@@ -857,11 +799,18 @@ async def on_startup():
         await db.jobs.delete_many({"fingerprint": {"$exists": False}})
     except Exception:
         pass
+    # Clear legacy demo businesses — real scraped records always have a
+    # `fingerprint` field (seeded demo docs lack it).
+    try:
+        await db.businesses.delete_many({"fingerprint": {"$exists": False}})
+    except Exception:
+        pass
     # start scheduler + kick off first scrape in background
     _start_scheduler()
     import asyncio
     asyncio.create_task(_run_scrape_job())
     asyncio.create_task(_run_jobs_scrape())
+    asyncio.create_task(_run_businesses_scrape())
 
 
 async def _run_scrape_job() -> int:
@@ -925,6 +874,8 @@ def _start_scheduler():
     scheduler = AsyncIOScheduler(timezone="UTC")
     scheduler.add_job(_run_scrape_job, "interval", hours=1, id="news_hourly", replace_existing=True)
     scheduler.add_job(_run_jobs_scrape, "interval", hours=1, id="jobs_hourly", replace_existing=True)
+    # Businesses/professionals change slowly — weekly is plenty.
+    scheduler.add_job(_run_businesses_scrape, "interval", days=7, id="biz_weekly", replace_existing=True)
     scheduler.start()
     app.state.scheduler = scheduler
     logger.info("scheduler started (news + jobs every 1h)")
@@ -992,6 +943,65 @@ async def _run_jobs_scrape() -> int:
     except Exception:
         pass
     logger.info("jobs scrape job done: %d jobs upserted", count)
+    return count
+
+
+async def _run_businesses_scrape() -> int:
+    """Scrape all business/professional sources, dedupe, auto-tag, upsert."""
+    logger.info("businesses scrape job starting…")
+    try:
+        items = await run_all_business_scrapers()
+    except Exception as e:
+        logger.exception("businesses scrape failed: %s", e)
+        return 0
+    if not items:
+        logger.warning("businesses scrape produced 0 items")
+        return 0
+    # Auto-tag with Claude. Preserve existing tags to save LLM credits.
+    try:
+        from businesses.categorizer import tag_records_batch
+        existing_tags_by_id: Dict[str, List[str]] = {}
+        async for d in db.businesses.find(
+            {"tags": {"$exists": True}},
+            {"id": 1, "tags": 1, "_id": 0},
+        ):
+            existing_tags_by_id[d["id"]] = d.get("tags") or []
+        to_tag: List[Dict[str, Any]] = []
+        for it in items:
+            existing = existing_tags_by_id.get(it["id"]) or []
+            scraper_tags = it.get("tags") or []
+            if not existing and not scraper_tags:
+                to_tag.append(it)
+        if to_tag:
+            logger.info("tagging %d new businesses/pros with LLM…", len(to_tag))
+            tag_lists = await tag_records_batch(to_tag, concurrency=4)
+            for it, tags in zip(to_tag, tag_lists):
+                it["tags"] = list(set((it.get("tags") or []) + (tags or [])))
+        for it in items:
+            if it["id"] in existing_tags_by_id and not it.get("tags"):
+                it["tags"] = existing_tags_by_id[it["id"]]
+            it.setdefault("tags", [])
+    except Exception as e:
+        logger.exception("businesses auto-tag failed (non-fatal): %s", e)
+        for it in items:
+            it.setdefault("tags", [])
+    # Upsert by id.
+    count = 0
+    scraped_ids: List[str] = []
+    for it in items:
+        await db.businesses.update_one({"id": it["id"]}, {"$set": it}, upsert=True)
+        scraped_ids.append(it["id"])
+        count += 1
+    # Purge stale scraped records (fingerprint exists = was scraped previously
+    # but missing from this run).
+    try:
+        await db.businesses.delete_many({
+            "fingerprint": {"$exists": True},
+            "id": {"$nin": scraped_ids},
+        })
+    except Exception:
+        pass
+    logger.info("businesses scrape job done: %d items upserted", count)
     return count
 
 
