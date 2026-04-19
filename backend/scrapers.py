@@ -416,6 +416,42 @@ async def _enrich_dates(client: httpx.AsyncClient, articles: List[Dict[str, Any]
             except Exception:
                 pass
 
+        # --- Final universal cleanup of summary/body_head/content_html ---
+        # Run REGARDLESS of where the summary came from (listing card, og:description,
+        # article body) so we consistently strip leading dates and title duplication.
+        try:
+            title = a.get("title") or ""
+            if a.get("summary"):
+                s = _strip_leading_date(a["summary"]) or ""
+                s = _strip_title_prefix(s, title) or ""
+                a["summary"] = s[:1500]
+            if a.get("_body_head"):
+                bh = _strip_leading_date(a["_body_head"]) or ""
+                bh = _strip_title_prefix(bh, title) or ""
+                a["_body_head"] = bh[:800]
+            # Also clean the first paragraph inside content_html — removes leading
+            # "DATE " / "TITLE " noise that sometimes survives inside <p>..</p>.
+            ch = a.get("content_html")
+            if ch and title:
+                # Only attempt replacement on the first <p> block
+                m = re.match(r"^(\s*<p[^>]*>)(.*?)(</p>)", ch, flags=re.S)
+                if m:
+                    head_open, inner, head_close = m.group(1), m.group(2), m.group(3)
+                    # strip tags to compare/clean text, but keep markup intact if no change
+                    inner_text = re.sub(r"<[^>]+>", "", inner)
+                    cleaned_text = _strip_leading_date(inner_text) or ""
+                    cleaned_text = _strip_title_prefix(cleaned_text, title) or ""
+                    # If cleanup actually stripped content, rebuild the first <p> with
+                    # just the cleaned text (acceptable tradeoff — the first paragraph
+                    # rarely contains inline formatting).
+                    if cleaned_text and cleaned_text != inner_text.strip():
+                        a["content_html"] = head_open + cleaned_text + head_close + ch[m.end():]
+                    elif not cleaned_text:
+                        # first paragraph was pure noise — drop it entirely
+                        a["content_html"] = ch[m.end():]
+        except Exception:
+            pass
+
     await asyncio.gather(*[run(a) for a in articles])
 
 
