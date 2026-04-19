@@ -209,7 +209,13 @@ async def _enrich_dates(client: httpx.AsyncClient, articles: List[Dict[str, Any]
         # date prefix like "05.04.2026 ..." (Davar listing titles)
         if re.match(r"^\d{1,2}[./]\d{1,2}[./]\d{2,4}\s", t):
             return True
-        if len(t) < 10 or len(t) > 250:
+        # trailing date ("...כל הפרטים מאיה כהן 08.03.2026") — card-meta leaking
+        if re.search(r"\d{1,2}[./]\d{1,2}[./]\d{2,4}\s*$", t):
+            return True
+        # listing-card bullets like " • כל הפרטים" — subtitle appended to title
+        if "•" in t:
+            return True
+        if len(t) < 10 or len(t) > 150:
             return True
         return False
 
@@ -735,6 +741,11 @@ async def _scrape_tag_page(
         if host_whitelist and not any(h in host for h in host_whitelist):
             continue
         if not link_pattern.search(full):
+            continue
+        # Strip Outbrain/Taboola recommender query params — links with those
+        # are sidebar "recommended" articles, not real tag-page articles.
+        # Also filter them out since they point to off-topic content.
+        if re.search(r"[?&](obOrigUrl|tmOrigUrl|utm_source=outbrain|utm_source=taboola)", full, re.I):
             continue
         if full in seen:
             continue
