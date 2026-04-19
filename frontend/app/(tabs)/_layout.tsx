@@ -1,10 +1,12 @@
 import React from "react";
 import { Tabs } from "expo-router";
-import { View, Text, StyleSheet, Platform } from "react-native";
+import { View, Text, StyleSheet, Platform, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS } from "../../theme";
 
 type IconName = React.ComponentProps<typeof Ionicons>["name"];
+
+const EILATUSH_MASCOT = require("../../assets/images/eilatush-mascot.png");
 
 function TabIcon({ focused, name, label, testID }: { focused: boolean; name: IconName; label: string; testID: string }) {
   return (
@@ -59,8 +61,12 @@ export default function TabsLayout() {
           title: "אילתוש",
           tabBarIcon: ({ focused }) => (
             <View style={styles.centerItem} testID="tab-eilatush">
-              <View style={[styles.centerBubble, focused && styles.centerBubbleActive]}>
-                <Ionicons name="sparkles" size={24} color="#fff" />
+              <View style={[styles.centerMascotWrap, focused && styles.centerMascotWrapActive]}>
+                <Image
+                  source={EILATUSH_MASCOT}
+                  style={styles.centerMascotImg}
+                  resizeMode="contain"
+                />
               </View>
               <Text
                 numberOfLines={1}
@@ -134,5 +140,30 @@ const styles = StyleSheet.create({
   },
   centerBubbleActive: {
     backgroundColor: COLORS.primaryHover,
+  },
+  centerMascotWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 6,
+  },
+  centerMascotWrapActive: {
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.45,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 10,
+    transform: [{ scale: 1.05 }],
+  },
+  centerMascotImg: {
+    width: 54,
+    height: 54,
   },
 });
