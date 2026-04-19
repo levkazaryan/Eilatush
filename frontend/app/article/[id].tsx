@@ -8,12 +8,29 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Platform,
+  Dimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { openLink, formatHebrewTime } from "../../api";
 import { COLORS, RADIUS, SPACING } from "../../theme";
+
+// Source names whose main content is a video — for these articles we embed
+// the source page inline (WebView on native, iframe on web) so the user can
+// watch the video without leaving the app.
+const VIDEO_FIRST_SOURCES = new Set<string>(["כאן חדשות"]);
+
+// Lazy import of WebView only on native (web build ignores it)
+let WebView: any = null;
+if (Platform.OS !== "web") {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    WebView = require("react-native-webview").WebView;
+  } catch {
+    WebView = null;
+  }
+}
 
 type Article = {
   id: string;
@@ -150,7 +167,20 @@ export default function ArticleScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
-          {article.image ? (
+          {VIDEO_FIRST_SOURCES.has(article.source_name || "") && article.source_url && Platform.OS !== "web" && WebView ? (
+            // Video news on native: embed the source page so the video plays inside the app
+            <View style={styles.videoWrap}>
+              <WebView
+                source={{ uri: article.source_url }}
+                style={{ flex: 1 }}
+                allowsFullscreenVideo
+                javaScriptEnabled
+                domStorageEnabled
+                mediaPlaybackRequiresUserAction={false}
+                startInLoadingState
+              />
+            </View>
+          ) : article.image ? (
             <Image source={{ uri: article.image }} style={styles.hero} />
           ) : null}
           <View style={styles.body}>
@@ -181,8 +211,14 @@ export default function ArticleScreen() {
               onPress={() => article.source_url && openLink(article.source_url)}
               testID="article-read-at-source"
             >
-              <Ionicons name="open-outline" size={18} color="#fff" />
-              <Text style={styles.readAtSourceText}>קרא את הכתבה המלאה</Text>
+              <Ionicons
+                name={VIDEO_FIRST_SOURCES.has(article.source_name || "") ? "play-circle-outline" : "open-outline"}
+                size={18}
+                color="#fff"
+              />
+              <Text style={styles.readAtSourceText}>
+                {VIDEO_FIRST_SOURCES.has(article.source_name || "") ? "צפה בוידאו במקור" : "קרא את הכתבה המלאה"}
+              </Text>
             </TouchableOpacity>
 
             <Text style={styles.disclaimer}>
@@ -217,6 +253,11 @@ const styles = StyleSheet.create({
   },
   topTitle: { color: COLORS.textPrimary, fontSize: 16, fontWeight: "800" },
   hero: { width: "100%", height: 240, backgroundColor: "#eee" },
+  videoWrap: {
+    width: "100%",
+    height: Dimensions.get("window").width * 0.62, // 16:10 cinematic aspect
+    backgroundColor: "#000",
+  },
   body: { padding: SPACING.lg },
   sourcePill: {
     alignSelf: "flex-end",
