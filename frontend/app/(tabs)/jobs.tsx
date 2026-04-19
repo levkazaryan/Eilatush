@@ -98,7 +98,7 @@ export default function JobsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [category, dateRange, jobType, experience, source]);
+  }, [JSON.stringify(category), dateRange, JSON.stringify(jobType), JSON.stringify(experience), JSON.stringify(source)]);
 
   useEffect(() => {
     loadMeta();

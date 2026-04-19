@@ -42,10 +42,12 @@ export default function BusinessesScreen() {
 
   const loadMeta = useCallback(async () => {
     try {
+      console.log("[biz] loadMeta start");
       const [catsBiz, catsPro] = await Promise.all([
         api.businessesCategories("business"),
         api.businessesCategories("professional"),
       ]);
+      console.log("[biz] loadMeta got", catsBiz?.length, catsPro?.length);
       setCategoriesBiz(Array.isArray(catsBiz) ? catsBiz : []);
       setCategoriesPro(Array.isArray(catsPro) ? catsPro : []);
     } catch (e) {
@@ -61,18 +63,20 @@ export default function BusinessesScreen() {
         category: category.length ? category : undefined,
         open_now: type === "business" ? openNow : undefined,
         q: debouncedQuery || undefined,
-        limit: 500,
+        limit: 100,
       });
-      console.log("[biz] load got", Array.isArray(data) ? data.length : "?");
+      console.log("[biz] load RECEIVED", Array.isArray(data) ? data.length : "?");
       setList(Array.isArray(data) ? data : []);
+      console.log("[biz] load setList done");
     } catch (e) {
-      console.warn("load biz", e);
+      console.warn("[biz] load ERROR", e);
       setList([]);
     } finally {
+      console.log("[biz] load FINALLY setLoading(false)");
       setLoading(false);
       setRefreshing(false);
     }
-  }, [type, category, openNow, debouncedQuery]);
+  }, [type, JSON.stringify(category), openNow, debouncedQuery]);
 
   useEffect(() => {
     loadMeta();
