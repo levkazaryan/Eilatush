@@ -192,8 +192,20 @@ async def get_news(source: Optional[str] = None, source_name: Optional[str] = No
         p = d.get("published_at")
         return -p.timestamp() if isinstance(p, datetime) else 0
     docs.sort(key=_key)
-    # strip heavy content_html from list response
+    # Generate a preview from content_html when summary is empty (happens
+    # after our title/date cleanup for sources like Maariv/Globes where the
+    # summary was just the title repeated). Then strip heavy content_html.
+    import re as _re
     for d in docs:
+        s = (d.get("summary") or "").strip()
+        if not s:
+            ch = d.get("content_html") or ""
+            if ch:
+                # strip tags → plain text, collapse whitespace
+                plain = _re.sub(r"<[^>]+>", " ", ch)
+                plain = _re.sub(r"\s+", " ", plain).strip()
+                if plain:
+                    d["summary"] = plain[:280]
         d.pop("content_html", None)
     return docs
 
