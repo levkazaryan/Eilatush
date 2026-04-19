@@ -105,7 +105,7 @@
 user_problem_statement: "Build the Jobs page of the Eilatush app with (1) AI-categorized subject filter via dropdown, (2) date-uploaded filter, (3) more useful filter dimensions (job_type, experience, source), (4) dedup across sources, (5) hourly auto-scrape from 3+ approved Eilat job boards (eilatjobs.com, jobmaster.co.il, yomyom.net)."
 
 backend:
-  - task: "Jobs scrapers package: eilatjobs + jobmaster + yomyom"
+  - task: "Jobs scrapers package: eilatjobs + jobmaster + yomyom + drushim"
     implemented: true
     working: true
     file: "/app/backend/jobs/sources/"
@@ -115,7 +115,7 @@ backend:
     status_history:
         -working: true
         -agent: "main"
-        -comment: "Smoke-tested run_all_job_scrapers directly: returned 54 unique jobs (35 eilatjobs + 10 jobmaster + 9 yomyom) with title, description, phone, image, fingerprint, job_type hints."
+        -comment: "Phase 1: 54 jobs (eilatjobs 35 + jobmaster 10 + yomyom 9). Phase 3 added drushim (+24 jobs) via Playwright Stealth (bypasses PerimeterX). Total 78 jobs. Matnasim = Cloudflare hard-blocked; alljobs = PerimeterX challenge with no accessible content; sahbak = Angular app returns non-Eilat results without user interaction; muni_bids = JS-rendered but no bid cards in DOM. Free options exhausted for remaining sources; would need residential proxies or official API partnership."
 
   - task: "Jobs API: /api/jobs (filtered), /jobs/categories, /jobs/sources, /jobs/status, /jobs/refresh"
     implemented: true

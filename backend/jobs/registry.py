@@ -10,6 +10,7 @@ from .sources import (
     scrape_eilatjobs,
     scrape_jobmaster,
     scrape_yomyom_jobs,
+    scrape_drushim,
 )
 
 # Each scraper tuple: (name, fn, priority).
@@ -21,6 +22,7 @@ SCRAPERS: List = [
     ("eilatjobs",   scrape_eilatjobs,   20),
     ("yomyom_jobs", scrape_yomyom_jobs, 20),
     ("jobmaster",   scrape_jobmaster,   30),
+    ("drushim",     scrape_drushim,     30),
 ]
 
 # Lookup by source slug for dedup prioritization.
