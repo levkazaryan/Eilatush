@@ -134,6 +134,88 @@ def _strip_leading_date(t: Optional[str]) -> Optional[str]:
     return cleaned if cleaned else t
 
 
+# Patterns Maariv / others use right after the title, before the actual body:
+#   "<title>DD/MM/YYYY | HH:MM"
+#   "<title> | DD/MM/YYYY | HH:MM"
+#   "<title>HH:MM"  (e.g. just "09:41" stuck to the end of the title)
+_META_TAIL_RE = re.compile(
+    r"^\s*(?:[|•\-–—,:\s])?\s*"
+    r"(?:\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4}"          # optional date
+    r"(?:\s*[|,•\-–—]\s*|\s+))?"
+    r"\d{1,2}:\d{2}"                                  # HH:MM required here
+    r"(?:\s*[|,•\-–—]\s*|\s+|$)"
+)
+
+
+def _norm(s: str) -> str:
+    """Normalise text for prefix comparison: collapse whitespace."""
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _strip_title_prefix(text: Optional[str], title: Optional[str]) -> Optional[str]:
+    """Remove a repeated article title (and any date/time suffix glued to it)
+    from the very beginning of ``text``.
+
+    Many sources (Maariv especially) set their ``og:description`` to be
+    ``"<title>DD/MM/YYYY | HH:MM"`` with no actual summary text. We display
+    the title and date separately in the UI, so this duplication is noise —
+    strip the title prefix plus any residual "HH:MM" / "DD/MM/YYYY | HH:MM"
+    tail that follows it.
+    """
+    if not text:
+        return text
+
+    def _clean_tail(remainder: str) -> str:
+        """Strip leftover metadata like "מהיום | DD/MM/YYYY | HH:MM" that
+        sometimes dangles after the title prefix."""
+        remainder = remainder.lstrip(" ,-–—|•:\t\n")
+        # Direct date/time tail
+        remainder = _META_TAIL_RE.sub("", remainder, count=1).lstrip(" ,-–—|•:\t\n")
+        # If remainder is short metadata only (e.g. "מהיום | 27/03/2026 | 11:53"),
+        # strip the whole thing. We detect this by checking it's <= 60 chars AND
+        # contains a date + time pattern.
+        if (
+            remainder
+            and len(remainder) <= 60
+            and re.search(r"\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4}", remainder)
+            and re.search(r"\d{1,2}:\d{2}", remainder)
+        ):
+            return ""
+        return remainder
+
+    # Always remove a plain leading "HH:MM" timestamp even when no title match
+    # (covers cases where the title was already cleaned off upstream).
+    if not title:
+        cleaned = _META_TAIL_RE.sub("", text, count=1).lstrip(" ,-–—|•:")
+        return cleaned or text
+
+    norm_text = _norm(text)
+    norm_title = _norm(title)
+    if not norm_title or len(norm_title) < 8:
+        return text
+    if norm_text.startswith(norm_title):
+        remainder = _clean_tail(norm_text[len(norm_title):])
+        return remainder if remainder else ""
+    # Some sources repeat the title with a slight trailing separator variant
+    # (e.g. title ends with ":" but description drops the ":"). Try a looser
+    # letters-only match as a fallback.
+    letters_only = lambda s: re.sub(r"[^\w\u0590-\u05FF]+", "", s)
+    lo_text = letters_only(norm_text)
+    lo_title = letters_only(norm_title)
+    if lo_title and lo_text.startswith(lo_title):
+        # Map letters-only offset back to original-string offset
+        idx = 0
+        consumed_letters = 0
+        while idx < len(norm_text) and consumed_letters < len(lo_title):
+            ch = norm_text[idx]
+            if letters_only(ch):
+                consumed_letters += 1
+            idx += 1
+        remainder = _clean_tail(norm_text[idx:])
+        return remainder if remainder else ""
+    return text
+
+
 async def _article_date(client: httpx.AsyncClient, url: str, use_browser: bool = False) -> Optional[datetime]:
     """Fetch an article URL just to extract its publication date from meta tags."""
     html = await _fetch_smart(client, url, use_browser=use_browser)
@@ -166,7 +248,10 @@ async def _article_meta(client: httpx.AsyncClient, url: str, use_browser: bool =
             "meta", attrs={"name": "description"}
         )
         if og_d and og_d.get("content"):
-            out["summary"] = _strip_leading_date(_strip(og_d["content"]))[:1500]
+            raw_sum = _strip_leading_date(_strip(og_d["content"]))
+            raw_sum = _strip_title_prefix(raw_sum, out.get("title") or t)
+            if raw_sum:
+                out["summary"] = raw_sum[:1500]
         # Clean article body via trafilatura — extracts ONLY the main article,
         # discarding comments, ads, related-articles, newsletter CTAs, etc.
         try:
@@ -189,7 +274,10 @@ async def _article_meta(client: httpx.AsyncClient, url: str, use_browser: bool =
                 # build body_head from the extracted text (post-cleanup)
                 body_txt = _strip(BeautifulSoup(inner, "lxml").get_text())
                 if body_txt:
-                    out["body_head"] = _strip_leading_date(body_txt)[:800]
+                    cleaned = _strip_leading_date(body_txt)
+                    cleaned = _strip_title_prefix(cleaned, out.get("title") or t)
+                    if cleaned:
+                        out["body_head"] = cleaned[:800]
         except Exception:
             pass
         # Fallback body_head if trafilatura failed
@@ -203,7 +291,10 @@ async def _article_meta(client: httpx.AsyncClient, url: str, use_browser: bool =
                 for bad in main.find_all(["script", "style", "nav", "aside", "footer", "header", "form"]):
                     bad.decompose()
                 body_text = _strip(main.get_text())
-                out["body_head"] = _strip_leading_date(body_text)[:800]
+                cleaned = _strip_leading_date(body_text)
+                cleaned = _strip_title_prefix(cleaned, out.get("title") or t)
+                if cleaned:
+                    out["body_head"] = cleaned[:800]
         return out
     except Exception:
         return {}
