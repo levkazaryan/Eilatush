@@ -167,39 +167,46 @@ async def get_businesses(category: Optional[str] = None, open_now: Optional[bool
 @api_router.get("/jobs")
 async def get_jobs(
     urgency: Optional[str] = None,
-    category: Optional[str] = None,
-    date_range: Optional[str] = None,  # "today" | "3d" | "week" | "month"
-    job_type: Optional[str] = None,    # full_time | part_time | shifts | temporary | remote
-    experience: Optional[str] = None,  # none | required
-    source: Optional[str] = None,      # source slug (eilatjobs / jobmaster / yomyom / ...)
+    category: Optional[str] = None,     # comma-separated list: "hotels,sales"
+    date_range: Optional[str] = None,   # "today" | "3d" | "week" | "month"
+    job_type: Optional[str] = None,     # comma-separated list: "full_time,shifts"
+    experience: Optional[str] = None,   # comma-separated list: "none,required"
+    source: Optional[str] = None,       # comma-separated list: "drushim,jobmaster"
 ):
     query: Dict[str, Any] = {}
     if urgency:
         query["urgency"] = urgency
-    if category:
-        # tags is a list; match any
-        query["tags"] = category
-    if job_type:
-        query["job_type"] = job_type
-    if experience:
-        query["experience"] = experience
-    if source:
-        query["source"] = source
-    # date_range → posted_at lower-bound
+
+    def _split(val: Optional[str]) -> List[str]:
+        if not val:
+            return []
+        return [v for v in (s.strip() for s in val.split(",")) if v]
+
+    cats = _split(category)
+    if cats:
+        # tags is an array per doc → $in matches any
+        query["tags"] = {"$in": cats}
+    jts = _split(job_type)
+    if jts:
+        query["job_type"] = {"$in": jts}
+    exps = _split(experience)
+    if exps:
+        query["experience"] = {"$in": exps}
+    srcs = _split(source)
+    if srcs:
+        query["source"] = {"$in": srcs}
+    # date_range stays single (ranges are nested)
     if date_range in ("today", "3d", "week", "month"):
         now = datetime.now(timezone.utc)
         deltas = {"today": timedelta(days=1), "3d": timedelta(days=3),
                   "week": timedelta(days=7), "month": timedelta(days=30)}
         query["posted_at"] = {"$gte": now - deltas[date_range]}
     docs = await db.jobs.find(query, {"_id": 0}).to_list(500)
-    # sort: scraped jobs (have `fingerprint`) show real posted_at desc; demo
-    # seeded jobs keep urgency-based ordering as a fallback.
     def _key(d: Dict[str, Any]):
         p = d.get("posted_at")
         ts = -p.timestamp() if isinstance(p, datetime) else 0
         return ts
     docs.sort(key=_key)
-    # make sure `tags` is always present
     for d in docs:
         d.setdefault("tags", [])
         d.setdefault("also_in", [])

@@ -50,12 +50,12 @@ export default function JobsScreen() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const router = useRouter();
 
-  // Filters
-  const [category, setCategory] = useState("");
-  const [dateRange, setDateRange] = useState("");
-  const [jobType, setJobType] = useState("");
-  const [experience, setExperience] = useState("");
-  const [source, setSource] = useState("");
+  // Multi-select filters (arrays). Empty array = "all".
+  const [category, setCategory] = useState<string[]>([]);
+  const [dateRange, setDateRange] = useState(""); // single
+  const [jobType, setJobType] = useState<string[]>([]);
+  const [experience, setExperience] = useState<string[]>([]);
+  const [source, setSource] = useState<string[]>([]);
 
   // Dropdowns data
   const [categories, setCategories] = useState<JobCategory[]>([]);
@@ -84,11 +84,11 @@ export default function JobsScreen() {
   const load = useCallback(async () => {
     try {
       const data = await api.jobs({
-        category: category || undefined,
+        category: category.length ? category : undefined,
         date_range: dateRange || undefined,
-        job_type: jobType || undefined,
-        experience: experience || undefined,
-        source: source || undefined,
+        job_type: jobType.length ? jobType : undefined,
+        experience: experience.length ? experience : undefined,
+        source: source.length ? source : undefined,
       });
       setList(Array.isArray(data) ? data : []);
     } catch (e) {
@@ -115,7 +115,8 @@ export default function JobsScreen() {
     load();
   };
 
-  const activeCount = [category, dateRange, jobType, experience, source].filter(Boolean).length;
+  const activeCount =
+    category.length + (dateRange ? 1 : 0) + jobType.length + experience.length + source.length;
 
   const formatLastUpdated = (iso?: string | null) => {
     if (!iso) return "";
@@ -133,21 +134,51 @@ export default function JobsScreen() {
   };
 
   const clearAll = () => {
-    setCategory("");
+    setCategory([]);
     setDateRange("");
-    setJobType("");
-    setExperience("");
-    setSource("");
+    setJobType([]);
+    setExperience([]);
+    setSource([]);
+  };
+
+  // Toggle helper for multi-select filters
+  const toggle = (arr: string[], setter: (v: string[]) => void, value: string) => {
+    setter(arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value]);
+  };
+
+  // Build a human label for a multi-select dropdown button
+  const buildLabel = (
+    selected: string[],
+    allLabel: string,
+    optionLabel: (key: string) => string,
+  ) => {
+    if (selected.length === 0) return allLabel;
+    if (selected.length === 1) return optionLabel(selected[0]);
+    return `${optionLabel(selected[0])} +${selected.length - 1}`;
   };
 
   // Current label helpers
-  const currentCategoryLabel =
-    categories.find((c) => c.slug === category)?.label || "כל התחומים";
-  const currentCategoryEmoji = categories.find((c) => c.slug === category)?.emoji || "🏷️";
+  const catLabelOf = (slug: string) => {
+    const c = categories.find((c) => c.slug === slug);
+    return c ? `${c.emoji} ${c.label}` : slug;
+  };
+  const currentCategoryLabel = buildLabel(category, "כל התחומים", catLabelOf);
   const currentDateLabel = DATE_OPTS.find((d) => d.key === dateRange)?.label || "כל התאריכים";
-  const currentJobTypeLabel = JOB_TYPE_OPTS.find((d) => d.key === jobType)?.label || "כל סוגי המשרה";
-  const currentExpLabel = EXPERIENCE_OPTS.find((d) => d.key === experience)?.label || "ניסיון (הכל)";
-  const currentSourceLabel = sources.find((s) => s.source === source)?.source_name || "כל המקורות";
+  const currentJobTypeLabel = buildLabel(
+    jobType,
+    "כל סוגי המשרה",
+    (k) => JOB_TYPE_OPTS.find((o) => o.key === k)?.label || k,
+  );
+  const currentExpLabel = buildLabel(
+    experience,
+    "ניסיון (הכל)",
+    (k) => EXPERIENCE_OPTS.find((o) => o.key === k)?.label || k,
+  );
+  const currentSourceLabel = buildLabel(
+    source,
+    "כל המקורות",
+    (k) => sources.find((s) => s.source === k)?.source_name || k,
+  );
 
   return (
     <SafeAreaView style={styles.root} edges={["top"]}>
@@ -171,8 +202,8 @@ export default function JobsScreen() {
           <DropdownButton
             icon="pricetags-outline"
             label={currentCategoryLabel}
-            emoji={category ? currentCategoryEmoji : undefined}
-            active={!!category}
+            active={category.length > 0}
+            badge={category.length > 1 ? category.length : undefined}
             onPress={() => setOpenFilter("category")}
           />
           <DropdownButton
@@ -184,19 +215,22 @@ export default function JobsScreen() {
           <DropdownButton
             icon="time-outline"
             label={currentJobTypeLabel}
-            active={!!jobType}
+            active={jobType.length > 0}
+            badge={jobType.length > 1 ? jobType.length : undefined}
             onPress={() => setOpenFilter("job_type")}
           />
           <DropdownButton
             icon="school-outline"
             label={currentExpLabel}
-            active={!!experience}
+            active={experience.length > 0}
+            badge={experience.length > 1 ? experience.length : undefined}
             onPress={() => setOpenFilter("experience")}
           />
           <DropdownButton
             icon="open-outline"
             label={currentSourceLabel}
-            active={!!source}
+            active={source.length > 0}
+            badge={source.length > 1 ? source.length : undefined}
             onPress={() => setOpenFilter("source")}
           />
           {activeCount > 0 ? (
@@ -245,40 +279,55 @@ export default function JobsScreen() {
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>
-                {openFilter === "category" && "🏷️ בחר/י תחום"}
+                {openFilter === "category" && "🏷️ בחר/י תחומים"}
                 {openFilter === "date" && "📅 מתי הועלה"}
                 {openFilter === "job_type" && "⏰ סוג משרה"}
                 {openFilter === "experience" && "🎓 דרישת ניסיון"}
-                {openFilter === "source" && "🔗 מקור"}
+                {openFilter === "source" && "🔗 מקורות"}
               </Text>
-              <Pressable onPress={() => setOpenFilter(null)} hitSlop={10}>
-                <Ionicons name="close" size={24} color={COLORS.textSecondary} />
-              </Pressable>
+              <View style={{ flexDirection: "row-reverse", gap: 10, alignItems: "center" }}>
+                {/* Clear selections for this filter only (not for date_range) */}
+                {openFilter && openFilter !== "date" && (
+                  ((openFilter === "category" && category.length > 0) ||
+                   (openFilter === "job_type" && jobType.length > 0) ||
+                   (openFilter === "experience" && experience.length > 0) ||
+                   (openFilter === "source" && source.length > 0)) ? (
+                    <Pressable
+                      onPress={() => {
+                        if (openFilter === "category") setCategory([]);
+                        else if (openFilter === "job_type") setJobType([]);
+                        else if (openFilter === "experience") setExperience([]);
+                        else if (openFilter === "source") setSource([]);
+                      }}
+                      hitSlop={8}
+                    >
+                      <Text style={styles.sheetClearText}>נקה</Text>
+                    </Pressable>
+                  ) : null
+                )}
+                <Pressable onPress={() => setOpenFilter(null)} hitSlop={10}>
+                  <Ionicons name="close" size={24} color={COLORS.textSecondary} />
+                </Pressable>
+              </View>
             </View>
+            {openFilter && openFilter !== "date" ? (
+              <Text style={styles.sheetSub}>אפשר לבחור כמה אפשרויות</Text>
+            ) : null}
             <ScrollView contentContainerStyle={{ paddingBottom: 30 }}>
-              {openFilter === "category" && (
-                <>
-                  <OptionRow
-                    label="כל התחומים"
-                    emoji="🏷️"
-                    count={categories.find((c) => c.slug === "all")?.count}
-                    selected={category === ""}
-                    onPress={() => { setCategory(""); setOpenFilter(null); }}
-                  />
-                  {categories
-                    .filter((c) => c.slug !== "all")
-                    .map((c) => (
-                      <OptionRow
-                        key={c.slug}
-                        label={c.label}
-                        emoji={c.emoji}
-                        count={c.count}
-                        selected={category === c.slug}
-                        onPress={() => { setCategory(c.slug); setOpenFilter(null); }}
-                      />
-                    ))}
-                </>
-              )}
+              {openFilter === "category" &&
+                categories
+                  .filter((c) => c.slug !== "all")
+                  .map((c) => (
+                    <OptionRow
+                      key={c.slug}
+                      label={c.label}
+                      emoji={c.emoji}
+                      count={c.count}
+                      selected={category.includes(c.slug)}
+                      multi
+                      onPress={() => toggle(category, setCategory, c.slug)}
+                    />
+                  ))}
               {openFilter === "date" &&
                 DATE_OPTS.map((o) => (
                   <OptionRow
@@ -289,42 +338,47 @@ export default function JobsScreen() {
                   />
                 ))}
               {openFilter === "job_type" &&
-                JOB_TYPE_OPTS.map((o) => (
+                JOB_TYPE_OPTS.filter((o) => o.key).map((o) => (
                   <OptionRow
-                    key={o.key || "all"}
+                    key={o.key}
                     label={o.label}
-                    selected={jobType === o.key}
-                    onPress={() => { setJobType(o.key); setOpenFilter(null); }}
+                    selected={jobType.includes(o.key)}
+                    multi
+                    onPress={() => toggle(jobType, setJobType, o.key)}
                   />
                 ))}
               {openFilter === "experience" &&
-                EXPERIENCE_OPTS.map((o) => (
+                EXPERIENCE_OPTS.filter((o) => o.key).map((o) => (
                   <OptionRow
-                    key={o.key || "all"}
+                    key={o.key}
                     label={o.label}
-                    selected={experience === o.key}
-                    onPress={() => { setExperience(o.key); setOpenFilter(null); }}
+                    selected={experience.includes(o.key)}
+                    multi
+                    onPress={() => toggle(experience, setExperience, o.key)}
                   />
                 ))}
-              {openFilter === "source" && (
-                <>
+              {openFilter === "source" &&
+                sources.map((s) => (
                   <OptionRow
-                    label="כל המקורות"
-                    selected={source === ""}
-                    onPress={() => { setSource(""); setOpenFilter(null); }}
+                    key={s.source}
+                    label={s.source_name}
+                    count={s.count}
+                    selected={source.includes(s.source)}
+                    multi
+                    onPress={() => toggle(source, setSource, s.source)}
                   />
-                  {sources.map((s) => (
-                    <OptionRow
-                      key={s.source}
-                      label={s.source_name}
-                      count={s.count}
-                      selected={source === s.source}
-                      onPress={() => { setSource(s.source); setOpenFilter(null); }}
-                    />
-                  ))}
-                </>
-              )}
+                ))}
             </ScrollView>
+            {openFilter && openFilter !== "date" ? (
+              <Pressable
+                onPress={() => setOpenFilter(null)}
+                style={({ pressed }) => [styles.applyBtn, pressed && { opacity: 0.85 }]}
+              >
+                <Text style={styles.applyBtnText}>
+                  הצג {list.length} משרות
+                </Text>
+              </Pressable>
+            ) : null}
           </Pressable>
         </Pressable>
       </Modal>
@@ -335,13 +389,13 @@ export default function JobsScreen() {
 function DropdownButton({
   icon,
   label,
-  emoji,
+  badge,
   active,
   onPress,
 }: {
   icon: any;
   label: string;
-  emoji?: string;
+  badge?: number;
   active?: boolean;
   onPress: () => void;
 }) {
@@ -354,18 +408,19 @@ function DropdownButton({
         pressed && { opacity: 0.75 },
       ]}
     >
-      {emoji ? (
-        <Text style={{ fontSize: 14 }}>{emoji}</Text>
-      ) : (
-        <Ionicons
-          name={icon}
-          size={14}
-          color={active ? COLORS.primary : COLORS.textSecondary}
-        />
-      )}
+      <Ionicons
+        name={icon}
+        size={14}
+        color={active ? COLORS.primary : COLORS.textSecondary}
+      />
       <Text style={[styles.dropdownBtnText, active && { color: COLORS.primary }]} numberOfLines={1}>
         {label}
       </Text>
+      {typeof badge === "number" && badge > 1 ? (
+        <View style={styles.dropdownBadge}>
+          <Text style={styles.dropdownBadgeText}>{badge}</Text>
+        </View>
+      ) : null}
       <Ionicons
         name="chevron-down"
         size={12}
@@ -380,14 +435,23 @@ function OptionRow({
   emoji,
   count,
   selected,
+  multi,
   onPress,
 }: {
   label: string;
   emoji?: string;
   count?: number;
   selected?: boolean;
+  multi?: boolean;
   onPress: () => void;
 }) {
+  const iconName = multi
+    ? selected
+      ? "checkbox"
+      : "square-outline"
+    : selected
+      ? "checkmark-circle"
+      : "ellipse-outline";
   return (
     <Pressable
       onPress={onPress}
@@ -398,8 +462,8 @@ function OptionRow({
       ]}
     >
       <Ionicons
-        name={selected ? "checkmark-circle" : "ellipse-outline"}
-        size={20}
+        name={iconName as any}
+        size={22}
         color={selected ? COLORS.primary : COLORS.textMuted}
       />
       <Text style={[styles.optionLabel, selected && { color: COLORS.primary, fontWeight: "900" }]} numberOfLines={1}>
@@ -459,6 +523,16 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     maxWidth: 120,
   },
+  dropdownBadge: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dropdownBadgeText: { color: "#fff", fontSize: 10, fontWeight: "900" },
 
   clearBtn: {
     flexDirection: "row-reverse",
@@ -509,6 +583,32 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "900",
     textAlign: "right",
+    flex: 1,
+  },
+  sheetSub: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    textAlign: "right",
+    paddingHorizontal: 6,
+    paddingBottom: 8,
+  },
+  sheetClearText: {
+    color: COLORS.primary,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  applyBtn: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 14,
+    marginHorizontal: 0,
+    marginBottom: 10,
+    borderRadius: RADIUS.pill,
+    alignItems: "center",
+  },
+  applyBtnText: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 14,
   },
 
   optionRow: {

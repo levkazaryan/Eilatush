@@ -105,6 +105,18 @@
 user_problem_statement: "Build the Jobs page of the Eilatush app with (1) AI-categorized subject filter via dropdown, (2) date-uploaded filter, (3) more useful filter dimensions (job_type, experience, source), (4) dedup across sources, (5) hourly auto-scrape from 3+ approved Eilat job boards (eilatjobs.com, jobmaster.co.il, yomyom.net)."
 
 backend:
+  - task: "Multi-select filters (category, job_type, experience, source)"
+    implemented: true
+    working: true
+    file: "/app/frontend/app/(tabs)/jobs.tsx + /app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "main"
+        -comment: "Changed 4 dropdowns (category, job_type, experience, source) to multi-select checkboxes. Date range stays single (nested ranges). Backend /api/jobs accepts comma-separated values → $in operator. Modal shows 'אפשר לבחור כמה אפשרויות', live apply button 'הצג N משרות', per-filter 'נקה' button. Dropdown pill shows 'Label +N' and a badge count when multi is active. Verified: /jobs?category=hotels,sales,restaurants returns 45 jobs (union); /jobs?job_type=full_time,shifts returns 38; /jobs?source=drushim,jobmaster returns 34."
+
   - task: "Jobs scrapers package: eilatjobs + jobmaster + yomyom + drushim"
     implemented: true
     working: true

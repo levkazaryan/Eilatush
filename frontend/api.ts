@@ -22,19 +22,24 @@ export const api = {
   },
   async jobs(params: {
     urgency?: string;
-    category?: string;
+    category?: string[] | string;
     date_range?: string;
-    job_type?: string;
-    experience?: string;
-    source?: string;
+    job_type?: string[] | string;
+    experience?: string[] | string;
+    source?: string[] | string;
   } = {}) {
     const qs = new URLSearchParams();
+    const toParam = (v?: string[] | string) => {
+      if (!v) return undefined;
+      if (Array.isArray(v)) return v.length ? v.join(",") : undefined;
+      return v || undefined;
+    };
     if (params.urgency) qs.set("urgency", params.urgency);
-    if (params.category) qs.set("category", params.category);
+    const c = toParam(params.category); if (c) qs.set("category", c);
     if (params.date_range) qs.set("date_range", params.date_range);
-    if (params.job_type) qs.set("job_type", params.job_type);
-    if (params.experience) qs.set("experience", params.experience);
-    if (params.source) qs.set("source", params.source);
+    const jt = toParam(params.job_type); if (jt) qs.set("job_type", jt);
+    const ex = toParam(params.experience); if (ex) qs.set("experience", ex);
+    const src = toParam(params.source); if (src) qs.set("source", src);
     const r = await fetch(`${API}/api/jobs?${qs.toString()}`);
     return r.json();
   },
