@@ -12,12 +12,44 @@ export const api = {
     const r = await fetch(`${API}/api/events?${q.toString()}`);
     return r.json();
   },
-  async businesses(params: { category?: string; open_now?: boolean; q?: string } = {}) {
+  async businesses(params: {
+    type?: "business" | "professional";
+    category?: string[] | string;
+    source?: string[] | string;
+    q?: string;
+    open_now?: boolean;
+    limit?: number;
+  } = {}) {
     const qs = new URLSearchParams();
-    if (params.category) qs.set("category", params.category);
-    if (params.open_now) qs.set("open_now", "true");
+    const toParam = (v?: string[] | string) => {
+      if (!v) return undefined;
+      if (Array.isArray(v)) return v.length ? v.join(",") : undefined;
+      return v || undefined;
+    };
+    if (params.type) qs.set("type", params.type);
+    const c = toParam(params.category); if (c) qs.set("category", c);
+    const s = toParam(params.source); if (s) qs.set("source", s);
     if (params.q) qs.set("q", params.q);
+    if (params.open_now) qs.set("open_now", "true");
+    if (params.limit) qs.set("limit", String(params.limit));
     const r = await fetch(`${API}/api/businesses?${qs.toString()}`);
+    return r.json();
+  },
+  async businessesCategories(type: "business" | "professional" = "business") {
+    const r = await fetch(`${API}/api/businesses/categories?type=${type}`);
+    return r.json();
+  },
+  async businessesSources(type: "business" | "professional" = "business") {
+    const r = await fetch(`${API}/api/businesses/sources?type=${type}`);
+    return r.json();
+  },
+  async businessesStatus() {
+    const r = await fetch(`${API}/api/businesses/status`);
+    return r.json();
+  },
+  async business(id: string) {
+    const r = await fetch(`${API}/api/businesses/${id}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
     return r.json();
   },
   async jobs(params: {
@@ -88,6 +120,14 @@ export const api = {
     });
     return r.json();
   },
+};
+
+export const openWaze = (query?: string) => {
+  if (!query) return;
+  // Opens Waze search; when address is given, Waze picks the best match.
+  const encoded = encodeURIComponent(query);
+  const url = `https://waze.com/ul?q=${encoded}&navigate=yes`;
+  Linking.openURL(url).catch(() => {});
 };
 
 export const openWhatsApp = (phone?: string, message?: string) => {

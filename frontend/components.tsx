@@ -20,17 +20,23 @@ export type EventT = {
 
 export type BusinessT = {
   id: string;
+  type: "business" | "professional";
   name: string;
-  category: string;
-  description: string;
-  image: string;
-  address: string;
-  phone?: string;
-  whatsapp?: string;
-  open_hours: string;
-  deal?: string;
-  rating: number;
-  tags: string[];
+  subtitle?: string | null;
+  description?: string;
+  address?: string | null;
+  phone?: string | null;
+  whatsapp?: string | null;
+  email?: string | null;
+  website?: string | null;
+  open_hours?: string | null;
+  image?: string | null;
+  source?: string;
+  source_name?: string;
+  source_url?: string;
+  category_hint?: string | null;
+  tags?: string[];
+  also_in?: string[];
   open_now?: boolean;
 };
 
@@ -172,71 +178,153 @@ export function EventCard({ item }: { item: EventT }) {
   );
 }
 
-export function BusinessCard({ item }: { item: BusinessT }) {
+// Business category slug → {label, emoji}. Synced with backend
+// /app/backend/businesses/categorizer.py (BUSINESS_CATEGORIES).
+export const BIZ_CATEGORY: Record<string, { label: string; emoji: string }> = {
+  restaurants:     { label: "מסעדות",          emoji: "🍽️" },
+  cafes:           { label: "בתי קפה",         emoji: "☕" },
+  bars:            { label: "פאבים וברים",      emoji: "🍺" },
+  fast_food:       { label: "מזון מהיר",        emoji: "🍔" },
+  attractions:     { label: "אטרקציות",        emoji: "🎢" },
+  hotels:          { label: "מלונאות",         emoji: "🏨" },
+  spa:             { label: "ספא",             emoji: "💆" },
+  beauty:          { label: "יופי",            emoji: "💅" },
+  fashion:         { label: "אופנה",           emoji: "👗" },
+  jewelry:         { label: "תכשיטים",         emoji: "💍" },
+  electronics:     { label: "אלקטרוניקה",      emoji: "💻" },
+  appliances:      { label: "חשמל ביתי",       emoji: "🔌" },
+  phones:          { label: "סלולר",           emoji: "📱" },
+  home:            { label: "ריהוט",           emoji: "🛋️" },
+  supermarket:     { label: "סופר",            emoji: "🛒" },
+  shopping_center: { label: "מרכזי קניות",     emoji: "🏬" },
+  travel:          { label: "משרדי נסיעות",    emoji: "✈️" },
+  transport:       { label: "תחבורה",          emoji: "🚗" },
+  marine:          { label: "ספורט ימי",       emoji: "🤿" },
+  consulate:       { label: "קונסוליות",       emoji: "🏛️" },
+  services_biz:    { label: "שירותים",         emoji: "🧾" },
+  // Professionals
+  construction:    { label: "שיפוצים",         emoji: "🏗️" },
+  electrician:     { label: "חשמלאות",         emoji: "⚡" },
+  plumber:         { label: "אינסטלציה",       emoji: "🔧" },
+  ac:              { label: "מיזוג",           emoji: "❄️" },
+  appliance_fix:   { label: "תיקון חשמל",      emoji: "🔌" },
+  carpentry:       { label: "נגרות",           emoji: "🪚" },
+  sealing:         { label: "איטום",           emoji: "🧱" },
+  cleaning_pro:    { label: "ניקיון",          emoji: "🧹" },
+  gardening:       { label: "גינון",           emoji: "🌳" },
+  moving:          { label: "הובלות",          emoji: "📦" },
+  locksmith:       { label: "מנעולנות",        emoji: "🔑" },
+  pest:            { label: "הדברה",           emoji: "🐛" },
+  auto_repair:     { label: "מוסכים",          emoji: "🚙" },
+  tutor:           { label: "מורים פרטיים",    emoji: "📚" },
+  therapy:         { label: "טיפול רגשי",      emoji: "💭" },
+  health_pro:      { label: "בריאות",          emoji: "🏥" },
+  lawyer:          { label: "עו״ד",            emoji: "⚖️" },
+  accountant:      { label: "רו״ח",            emoji: "🧮" },
+  tech_pro:        { label: "מחשבים",          emoji: "💻" },
+  graphics:        { label: "גרפיקה",          emoji: "🎨" },
+  photo:           { label: "צילום",           emoji: "📷" },
+  events_pro:      { label: "אירועים",         emoji: "🎉" },
+  beauty_home:     { label: "יופי ביתי",        emoji: "💇" },
+};
+
+export function BusinessCard({ item, onPress }: { item: BusinessT; onPress?: () => void }) {
+  const isPro = item.type === "professional";
+  const primaryTag = (item.tags || [])[0];
+  const tagInfo = primaryTag ? BIZ_CATEGORY[primaryTag] : null;
   return (
-    <View style={styles.bizCard} testID={`business-card-${item.id}`}>
-      <Image source={{ uri: item.image }} style={styles.bizImage} />
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.bizCard, pressed && { opacity: 0.85 }]}
+      testID={`business-card-${item.id}`}
+    >
+      {!isPro && item.image ? (
+        <Image source={{ uri: item.image }} style={styles.bizImage} />
+      ) : (
+        <View style={[styles.bizImage, styles.bizImagePlaceholder]}>
+          <Ionicons
+            name={isPro ? "construct-outline" : "storefront-outline"}
+            size={34}
+            color={COLORS.textMuted}
+          />
+        </View>
+      )}
       <View style={styles.bizBody}>
         <View style={styles.bizHeader}>
           <Text style={styles.bizName} numberOfLines={1}>
             {item.name}
           </Text>
-          {item.open_now ? (
-            <View style={styles.openDot}>
-              <View style={styles.openDotInner} />
-              <Text style={styles.openText}>פתוח</Text>
-            </View>
-          ) : (
-            <View style={[styles.openDot, { backgroundColor: "rgba(239,68,68,0.12)" }]}>
-              <Text style={[styles.openText, { color: COLORS.danger }]}>סגור</Text>
-            </View>
-          )}
+          {!isPro && item.open_hours ? (
+            item.open_now ? (
+              <View style={styles.openDot}>
+                <View style={styles.openDotInner} />
+                <Text style={styles.openText}>פתוח</Text>
+              </View>
+            ) : (
+              <View style={[styles.openDot, { backgroundColor: "rgba(239,68,68,0.12)" }]}>
+                <Text style={[styles.openText, { color: COLORS.danger }]}>סגור</Text>
+              </View>
+            )
+          ) : null}
         </View>
+        {item.subtitle ? (
+          <Text style={styles.bizSubtitle} numberOfLines={1}>
+            {item.subtitle}
+          </Text>
+        ) : null}
         <View style={styles.metaRow}>
-          <Text style={styles.categoryPillSmall}>{categoryLabel[item.category] || item.category}</Text>
-          <Text style={styles.metaDot}>·</Text>
-          <Ionicons name="star" size={12} color="#FFB020" />
-          <Text style={styles.metaText}>{item.rating.toFixed(1)}</Text>
-          <Text style={styles.metaDot}>·</Text>
-          <Text style={styles.metaText}>{item.open_hours}</Text>
+          {tagInfo ? (
+            <Text style={styles.categoryPillSmall}>
+              {tagInfo.emoji} {tagInfo.label}
+            </Text>
+          ) : null}
+          {item.open_hours ? (
+            <>
+              {tagInfo ? <Text style={styles.metaDot}>·</Text> : null}
+              <Ionicons name="time-outline" size={11} color={COLORS.textMuted} />
+              <Text style={styles.metaText} numberOfLines={1}>
+                {item.open_hours}
+              </Text>
+            </>
+          ) : null}
         </View>
-        <Text style={styles.bizDesc} numberOfLines={2}>
-          {item.description}
-        </Text>
-        {item.deal ? (
-          <View style={styles.dealBadge}>
-            <Ionicons name="pricetag" size={12} color={COLORS.primary} />
-            <Text style={styles.dealText} numberOfLines={1}>
-              {item.deal}
+        {item.address ? (
+          <View style={styles.addrRow}>
+            <Ionicons name="location-outline" size={12} color={COLORS.textMuted} />
+            <Text style={styles.addressText} numberOfLines={1}>
+              {item.address}
             </Text>
           </View>
         ) : null}
         <View style={styles.actionsRow}>
-          <Text style={styles.addressText} numberOfLines={1}>
-            {item.address}
-          </Text>
           <View style={{ flex: 1 }} />
-          {item.phone && (
+          {item.phone ? (
             <TouchableOpacity
-              style={styles.iconBtn}
-              onPress={() => openPhone(item.phone)}
+              style={[styles.iconBtn, { backgroundColor: COLORS.success }]}
+              onPress={(e) => { e.stopPropagation(); openPhone(item.phone || undefined); }}
               testID={`business-call-${item.id}`}
             >
               <Ionicons name="call" size={16} color="#fff" />
             </TouchableOpacity>
-          )}
-          {item.whatsapp && (
+          ) : null}
+          {item.whatsapp ? (
             <TouchableOpacity
               style={[styles.iconBtn, { backgroundColor: COLORS.whatsapp }]}
-              onPress={() => openWhatsApp(item.whatsapp, `היי, אני מהאפליקציה אילתוש ומתעניין ב־${item.name}`)}
+              onPress={(e) => {
+                e.stopPropagation();
+                openWhatsApp(
+                  item.whatsapp || undefined,
+                  `היי, ראיתי אותך באפליקציית אילתוש ואשמח לקבל פרטים על ${item.name}`,
+                );
+              }}
               testID={`business-whatsapp-${item.id}`}
             >
               <Ionicons name="logo-whatsapp" size={16} color="#fff" />
             </TouchableOpacity>
-          )}
+          ) : null}
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -603,6 +691,25 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   bizImage: { width: 110, height: "100%", minHeight: 140 },
+  bizImagePlaceholder: {
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bizSubtitle: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    fontWeight: "600",
+    marginTop: 2,
+    textAlign: "right",
+    writingDirection: "rtl",
+  },
+  addrRow: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 6,
+  },
   bizBody: { flex: 1, padding: 12 },
   bizHeader: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
   bizName: { color: COLORS.textPrimary, fontSize: 16, fontWeight: "900", flex: 1, textAlign: "right" },
