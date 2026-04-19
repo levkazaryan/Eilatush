@@ -118,6 +118,22 @@ def _extract_title(asoup) -> Optional[str]:
     return None
 
 
+_LEADING_DATE_RE = re.compile(
+    r"^\s*\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4}"       # dd/mm/yyyy or dd.mm.yy
+    r"(?:\s*[,\-–—|]\s*|\s+[|•]\s+|\s+)"           # separator (comma, dash, pipe, bullet, or whitespace)
+)
+
+
+def _strip_leading_date(t: Optional[str]) -> Optional[str]:
+    """Strip leading date prefixes like "17.09.2025 …" / "05/04/26 | …" that
+    Davar (and occasionally others) prepend to article body / summary — the
+    card already shows the date separately, so repeating it is noisy."""
+    if not t:
+        return t
+    cleaned = _LEADING_DATE_RE.sub("", t, count=1).lstrip(" ,-–—|•:")
+    return cleaned if cleaned else t
+
+
 async def _article_date(client: httpx.AsyncClient, url: str, use_browser: bool = False) -> Optional[datetime]:
     """Fetch an article URL just to extract its publication date from meta tags."""
     html = await _fetch_smart(client, url, use_browser=use_browser)
@@ -150,7 +166,7 @@ async def _article_meta(client: httpx.AsyncClient, url: str, use_browser: bool =
             "meta", attrs={"name": "description"}
         )
         if og_d and og_d.get("content"):
-            out["summary"] = _strip(og_d["content"])[:1500]
+            out["summary"] = _strip_leading_date(_strip(og_d["content"]))[:1500]
         # Clean article body via trafilatura — extracts ONLY the main article,
         # discarding comments, ads, related-articles, newsletter CTAs, etc.
         try:
@@ -173,7 +189,7 @@ async def _article_meta(client: httpx.AsyncClient, url: str, use_browser: bool =
                 # build body_head from the extracted text (post-cleanup)
                 body_txt = _strip(BeautifulSoup(inner, "lxml").get_text())
                 if body_txt:
-                    out["body_head"] = body_txt[:800]
+                    out["body_head"] = _strip_leading_date(body_txt)[:800]
         except Exception:
             pass
         # Fallback body_head if trafilatura failed
@@ -187,7 +203,7 @@ async def _article_meta(client: httpx.AsyncClient, url: str, use_browser: bool =
                 for bad in main.find_all(["script", "style", "nav", "aside", "footer", "header", "form"]):
                     bad.decompose()
                 body_text = _strip(main.get_text())
-                out["body_head"] = body_text[:800]
+                out["body_head"] = _strip_leading_date(body_text)[:800]
         return out
     except Exception:
         return {}
