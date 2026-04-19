@@ -150,7 +150,7 @@ async def _article_meta(client: httpx.AsyncClient, url: str, use_browser: bool =
             "meta", attrs={"name": "description"}
         )
         if og_d and og_d.get("content"):
-            out["summary"] = _strip(og_d["content"])[:400]
+            out["summary"] = _strip(og_d["content"])[:1500]
         # Clean article body via trafilatura — extracts ONLY the main article,
         # discarding comments, ads, related-articles, newsletter CTAs, etc.
         try:
@@ -366,7 +366,7 @@ def _make_article(
     return {
         "id": _hash_url(source_url),
         "title": _strip(title)[:300],
-        "summary": _strip(summary)[:500],
+        "summary": _strip(summary)[:1500],
         "content_html": content_html or "",
         "image": image or None,
         "source_name": source_name,
