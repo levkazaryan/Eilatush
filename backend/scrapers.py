@@ -1681,7 +1681,8 @@ SINGLE_PAGE_SOURCES: List = []  # not used any longer — all sources are full-s
 # Format: (base_url, source_name, source_type, link_patterns, exclude_patterns, max_items, require_eilat_keyword, use_browser)
 FULL_SITE_SOURCES = [
     # Eilat-only domains → no keyword filter (everything IS Eilat)
-    ("https://icemalleilat.co.il/", "אייס מול אילת", "event", None, None, 40, False, False),
+    # Note: אייס מול אילת (icemalleilat.co.il) removed per user request —
+    # the site's homepage content isn't actionable news for residents.
     # Note: נמל אילת (eilatport.co.il) removed — only publishes tenders/procurement notices
     # with no real news content (per user feedback).
     # Note: biz.eilat.muni.il removed — static about-us pages for the municipal business
