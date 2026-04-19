@@ -6,6 +6,7 @@ short description, and a permalink of the form /jobs/checknum.asp?key=<N>.
 """
 from __future__ import annotations
 
+import asyncio
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
@@ -83,12 +84,14 @@ def _split_listing_text(raw: str) -> Dict[str, Any]:
 
 
 async def scrape_jobmaster(client: httpx.AsyncClient) -> List[Dict[str, Any]]:
+    # JobMaster shows ~83 Eilat jobs in total but gates pages 2..N behind a
+    # login wall, so we can only reliably pull page 1 (~10 jobs).
     html = await _fetch(client, _LIST_URL)
     if not html:
         return []
     soup = BeautifulSoup(html, "lxml")
     results: List[Dict[str, Any]] = []
-    seen = set()
+    seen: set = set()
     for art in soup.find_all("article"):
         cls = art.get("class") or []
         if not any("JobItem" in c or "CardStyle" in c for c in cls):
@@ -106,21 +109,18 @@ async def scrape_jobmaster(client: httpx.AsyncClient) -> List[Dict[str, Any]]:
         if not title or len(title) < 3:
             continue
         description = parsed["description"] or title
-        # Sanity check: must mention Eilat in the card OR the search is location-scoped so assume all are Eilat.
-        # (Location filter is in the URL; server-side filters to אילת.)
-        job = _make_job(
-            title=title,
-            company=parsed["company"],
-            description=description,
-            source_url=href,
-            source="jobmaster",
-            source_name="JobMaster",
-            posted_at=parsed["posted_at"],
-            location=parsed["city"],
-            job_type=parsed["job_type"],
+        results.append(
+            _make_job(
+                title=title,
+                company=parsed["company"],
+                description=description,
+                source_url=href,
+                source="jobmaster",
+                source_name="JobMaster",
+                posted_at=parsed["posted_at"],
+                location=parsed["city"],
+                job_type=parsed["job_type"],
+            )
         )
-        results.append(job)
-        if len(results) >= 50:
-            break
-    log.info("jobmaster → %d jobs", len(results))
+    log.info("jobmaster → %d jobs (page 1 only, deeper pages require login)", len(results))
     return results

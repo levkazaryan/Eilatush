@@ -187,20 +187,47 @@ def _extract_jobs_from_html(html: str) -> List[Dict[str, Any]]:
 
 
 async def scrape_drushim(_client: httpx.AsyncClient) -> List[Dict[str, Any]]:
-    """Drushim requires a real browser. We ignore the httpx client and use Playwright."""
-    from scrapers.base import _pw_fetch  # reuse the stealth Chromium from news pipeline
+    """Drushim requires a real browser. We run the default search AND several
+    Hebrew category-scoped searches so we can pull more than the 25-job cap."""
+    from scrapers.base import _pw_fetch  # reuse the stealth Chromium
+    import urllib.parse
 
-    try:
-        html = await asyncio.wait_for(_pw_fetch(_SEARCH_URL), timeout=50)
-    except asyncio.TimeoutError:
-        log.warning("drushim playwright fetch timed out")
-        return []
-    except Exception as e:
-        log.warning("drushim playwright fetch error: %s", e)
-        return []
-    if not html:
-        log.warning("drushim returned no html")
-        return []
-    jobs = _extract_jobs_from_html(html)
-    log.info("drushim → %d jobs", len(jobs))
+    # Each category URL returns up to ~30 jobs; running a handful in parallel
+    # brings the total from 25 → ~80-100+ unique Eilat jobs after dedup.
+    CATEGORIES = ["", "מלונות", "מסעדנות", "מכירות", "אבטחה", "ניקיון", "נהג", "בנייה", "בריאות", "הוראה"]
+    results_by_url: Dict[str, Dict[str, Any]] = {}
+
+    async def fetch_and_parse(cat: str) -> None:
+        if cat:
+            url = (
+                "https://www.drushim.co.il/jobs/search/"
+                "%D7%90%D7%99%D7%9C%D7%AA/"
+                f"{urllib.parse.quote(cat)}/?ref=288"
+            )
+        else:
+            url = _SEARCH_URL
+        try:
+            html = await asyncio.wait_for(_pw_fetch(url), timeout=50)
+        except asyncio.TimeoutError:
+            log.warning("drushim category %r fetch timed out", cat)
+            return
+        except Exception as e:
+            log.warning("drushim category %r fetch error: %s", cat, e)
+            return
+        if not html:
+            return
+        for job in _extract_jobs_from_html(html):
+            # dedupe across categories by source_url
+            results_by_url.setdefault(job["source_url"], job)
+
+    # Cap concurrency to 3 to avoid hammering the site
+    sem = asyncio.Semaphore(3)
+
+    async def guarded(cat: str) -> None:
+        async with sem:
+            await fetch_and_parse(cat)
+
+    await asyncio.gather(*[guarded(c) for c in CATEGORIES])
+    jobs = list(results_by_url.values())
+    log.info("drushim → %d jobs (across %d category searches)", len(jobs), len(CATEGORIES))
     return jobs
