@@ -106,12 +106,16 @@ return a single-line JSON with these keys:
   {
     "title":       "<role / position, e.g. 'עובד/ת סופר' or 'חשמלאי מוסמך'>",
     "company":     "<hiring business if mentioned, else null>",
-    "description": "<2-3 short clear sentences describing what the job is>"
+    "description": "<2-3 short clear sentences describing what the job is>",
+    "email":       "<contact email address if one appears on the flyer, else null>"
   }
 
 RULES:
  - Return ONLY valid JSON (no markdown, no explanation).
  - Use clean Hebrew. Fix obvious OCR mistakes (missing nikud, wrong letters).
+ - Email addresses may appear as "mail@domain.co.il" or with spaces/OCR noise;
+   if you can confidently reconstruct one, return it in the email field.
+   Otherwise set email=null.
  - If the flyer clearly advertises a BUSINESS (e.g. construction, movers,
    shipping services) rather than a JOB, still try to extract a plausible job
    title from it (e.g. "עובדי בניין" for a construction company ad).
@@ -159,6 +163,7 @@ async def _llm_extract(ocr_text: str) -> Optional[Dict[str, Any]]:
         "title": (data.get("title") or "").strip()[:160],
         "company": ((data.get("company") or "") or "").strip()[:120] or None,
         "description": (data.get("description") or "").strip()[:600],
+        "email": (data.get("email") or None),
     }
 
 
@@ -176,9 +181,16 @@ async def _extract_one(
     source_url = f"{_URL}#phone-{re.sub(r'[^0-9+]', '', phone)}"
     # Short-circuit: skip OCR if we already have this job with a real title cached
     existing = existing_titles.get(source_url)
-    if existing and not existing.get("title", "").startswith("משרה בלוח יום-יום"):
-        # Build a fresh record BUT keep the cached title/company/description
-        return _make_job(
+    # Skip OCR + LLM if we already have a good cached record (clean title and,
+    # if the flyer has an email, we've already extracted it). We still refresh
+    # jobs that were saved BEFORE email extraction was added so their emails
+    # can be picked up on the next scrape cycle.
+    has_clean_title = existing and not existing.get("title", "").startswith("משרה בלוח יום-יום")
+    # A sentinel in the DB record: if `email_checked` is True, we already asked
+    # the LLM about email for this flyer.
+    email_already_checked = bool(existing and existing.get("email_checked"))
+    if has_clean_title and email_already_checked:
+        cached = _make_job(
             title=existing["title"],
             company=existing.get("company"),
             description=existing.get("description") or "משרה מלוח יום-יום באילת.",
@@ -186,13 +198,17 @@ async def _extract_one(
             source="yomyom",
             source_name="לוח יום-יום",
             phone=phone,
+            email=existing.get("email"),
             image=img_src,
             posted_at=datetime.now(timezone.utc),
         )
+        cached["email_checked"] = True
+        return cached
 
     title = ""
     company = None
     description = ""
+    email = None
 
     if img_src:
         try:
@@ -205,11 +221,20 @@ async def _extract_one(
                         title = llm["title"]
                         company = llm.get("company")
                         description = llm.get("description") or ""
+                        email = llm.get("email")
                     else:
                         # Fallback: pick best Hebrew line
                         t, d = _best_title_fallback(ocr_text)
                         title = t
                         description = d
+                    # Regex fallback for email if LLM missed it
+                    if not email:
+                        m = re.search(
+                            r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",
+                            ocr_text,
+                        )
+                        if m:
+                            email = m.group(0)
         except Exception as e:
             log.warning("yomyom OCR/LLM pipeline error for img %s: %s", img_src, e)
 
@@ -221,7 +246,7 @@ async def _extract_one(
             "לפרטי המשרה ופרטי הקשר התקשרו ישירות למפרסם."
         )
 
-    return _make_job(
+    result = _make_job(
         title=title,
         company=company,
         description=description,
@@ -229,9 +254,12 @@ async def _extract_one(
         source="yomyom",
         source_name="לוח יום-יום",
         phone=phone,
+        email=email,
         image=img_src,
         posted_at=datetime.now(timezone.utc),
     )
+    result["email_checked"] = True
+    return result
 
 
 async def _load_existing_by_source_url(client: httpx.AsyncClient) -> Dict[str, Dict[str, Any]]:

@@ -277,7 +277,14 @@ export function JobCard({ item, onPress }: { item: JobT; onPress?: () => void })
   const applyMsg = `היי, אני מהאפליקציה אילתוש ומעוניין/ת במשרה: ${item.title}`;
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.jobCard, pressed && { opacity: 0.85 }]} testID={`job-card-${item.id}`}>
-      {hasImage ? <Image source={{ uri: item.image as string }} style={styles.jobImage} /> : null}
+      {hasImage ? (
+        <View style={styles.jobImageWrap}>
+          <Image source={{ uri: item.image as string }} style={styles.jobImage} />
+          <View style={styles.jobImageHint} pointerEvents="none">
+            <Ionicons name="expand-outline" size={14} color="#fff" />
+          </View>
+        </View>
+      ) : null}
       <View style={styles.jobBody}>
         <View style={styles.jobHeader}>
           {tagInfo ? (
@@ -341,11 +348,27 @@ export function JobCard({ item, onPress }: { item: JobT; onPress?: () => void })
           <View style={{ flex: 1 }} />
           {item.phone ? (
             <TouchableOpacity
-              style={styles.iconBtn}
+              style={[styles.iconBtn, { backgroundColor: COLORS.success }]}
               onPress={(e: any) => { e?.stopPropagation?.(); openPhone(item.phone as string); }}
               testID={`job-call-${item.id}`}
             >
               <Ionicons name="call" size={16} color="#fff" />
+            </TouchableOpacity>
+          ) : null}
+          {item.email ? (
+            <TouchableOpacity
+              style={[styles.iconBtn, { backgroundColor: COLORS.accent }]}
+              onPress={(e: any) => {
+                e?.stopPropagation?.();
+                require("./api").openEmail(
+                  item.email as string,
+                  `מעוניין/ת במשרה: ${item.title}`,
+                  applyMsg,
+                );
+              }}
+              testID={`job-email-${item.id}`}
+            >
+              <Ionicons name="mail" size={16} color="#fff" />
             </TouchableOpacity>
           ) : null}
           {item.whatsapp ? (
@@ -627,6 +650,18 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   jobImage: { width: "100%", height: 130 },
+  jobImageWrap: { position: "relative" },
+  jobImageHint: {
+    position: "absolute",
+    top: 8,
+    end: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(15,23,42,0.65)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   jobBody: { padding: SPACING.md },
   jobHeader: { flexDirection: "row-reverse", alignItems: "center", gap: 6, flexWrap: "wrap" },
   jobTagPill: {

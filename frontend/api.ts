@@ -104,6 +104,15 @@ export const openPhone = (phone?: string) => {
   Linking.openURL(url).catch(() => {});
 };
 
+export const openEmail = (email?: string, subject?: string, body?: string) => {
+  if (!email) return;
+  const params: string[] = [];
+  if (subject) params.push(`subject=${encodeURIComponent(subject)}`);
+  if (body) params.push(`body=${encodeURIComponent(body)}`);
+  const url = `mailto:${email}${params.length ? "?" + params.join("&") : ""}`;
+  Linking.openURL(url).catch(() => {});
+};
+
 export const openLink = (url?: string) => {
   if (!url) return;
   if (Platform.OS === "web") {

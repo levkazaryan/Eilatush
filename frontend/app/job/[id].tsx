@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Pressable,
+  Modal,
+  Dimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -16,6 +18,7 @@ import {
   api,
   openLink,
   openPhone,
+  openEmail,
   openWhatsApp,
   formatJobPosted,
 } from "../../api";
@@ -58,6 +61,7 @@ export default function JobDetailScreen() {
   const [job, setJob] = useState<JobT | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [imgOpen, setImgOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -108,7 +112,19 @@ export default function JobDetailScreen() {
       <Header onBack={() => router.back()} title="פרטי המשרה" />
 
       <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
-        {job.image ? <Image source={{ uri: job.image }} style={styles.hero} /> : null}
+        {job.image ? (
+          <View style={styles.heroWrap}>
+            <Image source={{ uri: job.image }} style={styles.hero} resizeMode="cover" />
+            <Pressable
+              onPress={() => setImgOpen(true)}
+              style={({ pressed }) => [styles.heroExpandBtn, pressed && { opacity: 0.8 }]}
+              hitSlop={8}
+            >
+              <Ionicons name="expand-outline" size={18} color="#fff" />
+              <Text style={styles.heroExpandText}>הצג מלא</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         <View style={styles.body}>
           {/* Source / posted meta */}
@@ -187,7 +203,7 @@ export default function JobDetailScreen() {
       </ScrollView>
 
       {/* Bottom sticky apply bar */}
-      {(job.phone || job.whatsapp) ? (
+      {(job.phone || job.whatsapp || job.email) ? (
         <View style={styles.stickyBar}>
           {job.phone ? (
             <TouchableOpacity
@@ -196,6 +212,19 @@ export default function JobDetailScreen() {
             >
               <Ionicons name="call" size={18} color="#fff" />
               <Text style={styles.callBtnText}>התקשר</Text>
+            </TouchableOpacity>
+          ) : null}
+          {job.email ? (
+            <TouchableOpacity
+              style={styles.emailBtn}
+              onPress={() => openEmail(
+                job.email as string,
+                `מעוניין/ת במשרה: ${job.title}`,
+                `${applyMsg}\n\nלינק: ${job.source_url || ""}`,
+              )}
+            >
+              <Ionicons name="mail" size={18} color="#fff" />
+              <Text style={styles.emailBtnText}>מייל</Text>
             </TouchableOpacity>
           ) : null}
           {job.whatsapp ? (
@@ -209,6 +238,31 @@ export default function JobDetailScreen() {
           ) : null}
         </View>
       ) : null}
+
+      {/* Fullscreen image viewer */}
+      <Modal
+        visible={imgOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setImgOpen(false)}
+      >
+        <Pressable style={styles.lightboxBackdrop} onPress={() => setImgOpen(false)}>
+          <Pressable
+            style={styles.lightboxClose}
+            onPress={() => setImgOpen(false)}
+            hitSlop={12}
+          >
+            <Ionicons name="close" size={26} color="#fff" />
+          </Pressable>
+          {job?.image ? (
+            <Image
+              source={{ uri: job.image }}
+              style={styles.lightboxImg}
+              resizeMode="contain"
+            />
+          ) : null}
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -286,6 +340,20 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   hero: { width: "100%", height: 220 },
+  heroWrap: { position: "relative" },
+  heroExpandBtn: {
+    position: "absolute",
+    top: 10,
+    end: 10,
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.pill,
+    backgroundColor: "rgba(15,23,42,0.72)",
+  },
+  heroExpandText: { color: "#fff", fontSize: 12, fontWeight: "800" },
   body: { paddingHorizontal: SPACING.md, paddingTop: SPACING.md },
   topMetaRow: {
     flexDirection: "row-reverse",
@@ -418,9 +486,42 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 18,
     borderRadius: RADIUS.pill,
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.success,
   },
   callBtnText: { color: "#fff", fontWeight: "800", fontSize: 14 },
+  emailBtn: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    borderRadius: RADIUS.pill,
+    backgroundColor: COLORS.accent,
+  },
+  emailBtnText: { color: "#fff", fontWeight: "800", fontSize: 14 },
+  lightboxBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.95)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  lightboxClose: {
+    position: "absolute",
+    top: 48,
+    end: 20,
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    zIndex: 10,
+  },
+  lightboxImg: {
+    width: "100%",
+    height: "90%",
+  },
   applyBtn: {
     flex: 1,
     flexDirection: "row-reverse",
