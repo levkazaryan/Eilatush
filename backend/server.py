@@ -836,22 +836,29 @@ async def _run_scrape_job() -> int:
     # already have tags stay untouched so we don't re-spend LLM credits.
     try:
         from categorizer import tag_articles_batch
-        existing_tagged_ids = {
-            d["id"]
-            for d in await db.news.find(
-                {"tags": {"$exists": True, "$ne": []}},
-                {"id": 1, "_id": 0},
-            ).to_list(length=None)
-        }
-        to_tag = [a for a in articles if a["id"] not in existing_tagged_ids]
+        # Build a lookup of existing tags so we can preserve them on re-upsert.
+        existing_tags_by_id: Dict[str, List[str]] = {}
+        async for d in db.news.find(
+            {"tags": {"$exists": True}},
+            {"id": 1, "tags": 1, "_id": 0},
+        ):
+            existing_tags_by_id[d["id"]] = d.get("tags") or []
+        # Articles that still need tagging: NOT in DB OR have empty tags.
+        to_tag = [
+            a for a in articles
+            if not existing_tags_by_id.get(a["id"])  # missing or []
+        ]
         if to_tag:
             logger.info("tagging %d new articles…", len(to_tag))
             tag_lists = await tag_articles_batch(to_tag, concurrency=4)
             for a, tags in zip(to_tag, tag_lists):
                 a["tags"] = tags
-        # Articles already in DB keep their existing tags — just make sure any
-        # article without explicit tags gets an empty list (for consistent API).
+        # For every article NOT in to_tag, preserve the existing tags by
+        # overlaying them from DB. This prevents the upsert from wiping out
+        # tags we already paid the LLM to compute.
         for a in articles:
+            if a["id"] in existing_tags_by_id and not a.get("tags"):
+                a["tags"] = existing_tags_by_id[a["id"]]
             a.setdefault("tags", [])
     except Exception as e:
         logger.exception("auto-tagging failed (non-fatal): %s", e)
