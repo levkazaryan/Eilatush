@@ -280,7 +280,70 @@ async def _article_meta(client: httpx.AsyncClient, url: str, use_browser: bool =
                         out["body_head"] = cleaned[:800]
         except Exception:
             pass
-        # Fallback body_head if trafilatura failed
+
+        # Detect garbage content: trafilatura sometimes extracts the site's
+        # breadcrumb + "recent articles" sidebar instead of the actual body
+        # (happens on Maariv when the real body is short or wrapped in an
+        # unusual layout). If we detect this, try a selector-based extraction.
+        def _looks_like_noise(text: str) -> bool:
+            if not text:
+                return True
+            # breadcrumb like "מעריב>תגיות>..." or "לייף סטייל>" very early in text
+            head = text[:120]
+            if re.search(r">\s*\S+\s*>", head):
+                return True
+            if "תגיות>" in head or "תגיות <" in head:
+                return True
+            # lots of "DD/MM/YYYY | HH:MM" stamps in first 400 chars = article list
+            stamps = re.findall(r"\d{1,2}[./]\d{1,2}[./]\d{2,4}\s*[|•]\s*\d{1,2}:\d{2}", text[:600])
+            if len(stamps) >= 2:
+                return True
+            return False
+
+        body_head = out.get("body_head") or ""
+        if _looks_like_noise(body_head):
+            # Prefer selector-based extraction targeting the real article body.
+            selector_candidates = [
+                "[itemprop='articleBody']",
+                "[class*='article-body']",
+                "[class*='articleBody']",
+                "[class*='article_body']",
+                "[class*='article-content']",
+                "div.content-article",
+                "section.article-body",
+            ]
+            chosen_html = None
+            chosen_text = ""
+            for sel in selector_candidates:
+                for el in soup.select(sel):
+                    # drop ads / noise blocks
+                    for bad in el.find_all(["script", "style", "nav", "aside", "footer", "header", "form",
+                                              "iframe", "ins", "noscript"]):
+                        bad.decompose()
+                    txt = _strip(el.get_text(" "))
+                    if _looks_like_noise(txt):
+                        continue
+                    if len(txt) > len(chosen_text):
+                        chosen_text = txt
+                        chosen_html = str(el)
+                if chosen_text and len(chosen_text) > 150:
+                    break
+            if chosen_text:
+                cleaned = _strip_leading_date(chosen_text)
+                cleaned = _strip_title_prefix(cleaned, out.get("title") or t)
+                if cleaned:
+                    out["body_head"] = cleaned[:800]
+            if chosen_html:
+                # Rebuild a clean paragraph-based HTML from the selected block
+                node = BeautifulSoup(chosen_html, "lxml")
+                for bad in node.find_all(["script", "style", "nav", "aside", "footer", "header", "form",
+                                           "iframe", "ins", "noscript"]):
+                    bad.decompose()
+                # Wrap bare text into a single <p> and retain existing <p>/<img>
+                # tags for readability.
+                out["content_html"] = str(node)[:25000]
+
+        # Fallback body_head if trafilatura failed and no selector worked
         if not out.get("body_head"):
             main = (
                 soup.find("article")
