@@ -1139,6 +1139,23 @@ async def _scrape_tag_page(
     #    usually sidebar/related-articles that happen to mention Eilat in a
     #    tangential sub-section.
     kept: List[Dict[str, Any]] = []
+    # Major Israeli cities/regions whose presence in the article TITLE
+    # (when Eilat is absent from the title) marks the article as a digest
+    # / weekly-newsletter entry that we should skip — the tag-page match was
+    # almost certainly due to an Eilat-related sub-section in the body.
+    _OTHER_CITIES = [
+        "חיפה", "תל אביב", 'ת"א', "ירושלים", "באר שבע",
+        "הרצליה", "נתניה", "פתח תקווה", "ראשון לציון", "רמת גן",
+        "רחובות", "אשדוד", "אשקלון", "חדרה", "רעננה", "מודיעין",
+        "כפר סבא", "בת ים", "חולון", "רמת השרון", "יבנה", "לוד",
+        "רמלה", "טבריה", "צפת", "קיסריה", "עפולה", "נצרת",
+    ]
+    def _mentions_other_city_only(text: str) -> bool:
+        if not text:
+            return False
+        has_eilat = _contains_eilat(text)
+        has_other = any(c in text for c in _OTHER_CITIES)
+        return has_other and not has_eilat
     for a in out:
         if _is_boilerplate(a.get("title", "")):
             continue
@@ -1148,6 +1165,13 @@ async def _scrape_tag_page(
         hay = title + " " + summary + " " + body_head[:500]
         if not _contains_eilat(hay):
             log.info("dropping off-topic %s: %s", source_name, title[:60])
+            continue
+        # Skip digest pages: title explicitly names a *different* Israeli city
+        # and Eilat is absent from the title → this is a weekly newsletter
+        # that happens to contain an Eilat sub-item.
+        if _mentions_other_city_only(title):
+            log.info("dropping digest %s (title mentions other city): %s",
+                     source_name, title[:60])
             continue
         a.pop("_body_head", None)  # strip internal field
         kept.append(a)
