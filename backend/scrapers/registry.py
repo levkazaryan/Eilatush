@@ -23,6 +23,7 @@ from .sources import (
     scrape_globes_eilat,
     scrape_davar_eilat,
     scrape_walla_eilat,
+    scrape_hamal,
     scrape_facebook_eilat_muni,
 )
 
@@ -40,6 +41,7 @@ SCRAPERS = [
     ("globes_eilat", scrape_globes_eilat),
     ("davar_eilat", scrape_davar_eilat),
     ("walla_eilat", scrape_walla_eilat),
+    ("hamal", scrape_hamal),
     ("facebook_eilat_muni", scrape_facebook_eilat_muni),
 ]
 

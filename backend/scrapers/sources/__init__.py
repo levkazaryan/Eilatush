@@ -12,4 +12,5 @@ from .tag_pages import (
     scrape_walla_eilat,
 )
 from .mako import scrape_mako_eilat
+from .hamal import scrape_hamal
 from .facebook import scrape_facebook_eilat_muni

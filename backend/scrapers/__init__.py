@@ -60,6 +60,7 @@ from .sources import (
     scrape_davar_eilat,
     scrape_walla_eilat,
     scrape_mako_eilat,
+    scrape_hamal,
     scrape_facebook_eilat_muni,
 )
 
