@@ -105,6 +105,18 @@
 user_problem_statement: "Build the Jobs page of the Eilatush app with (1) AI-categorized subject filter via dropdown, (2) date-uploaded filter, (3) more useful filter dimensions (job_type, experience, source), (4) dedup across sources, (5) hourly auto-scrape from 3+ approved Eilat job boards (eilatjobs.com, jobmaster.co.il, yomyom.net)."
 
 backend:
+  - task: "Yomyom OCR — real job titles from image flyers"
+    implemented: true
+    working: true
+    file: "/app/backend/jobs/sources/yomyom_jobs.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "main"
+        -comment: "User reported yomyom titles were generic ('משרה בלוח יום-יום אילת #1'). Installed tesseract-ocr + hebrew traineddata + pytesseract. Pipeline: download flyer image → Hebrew OCR → pass garbled OCR text to Claude Sonnet 4.5 for title/company/description extraction → fallback heuristic (longest Hebrew line) if LLM unavailable. Titles now correctly show 'עובדי/ות חנות סופר-פארם' (סופר-פארם), 'עובד/ת לדירות אלמוגים' (אלמוגים), 'פקיד/ה קבלה במלון' (מלון קומפורט אילת), 'דרושים/ות עובדים למלון' (Atlas Hotels), etc. Tags auto-applied based on real content (hotels/cleaning/etc.)."
+
   - task: "Multi-select filters (category, job_type, experience, source)"
     implemented: true
     working: true
