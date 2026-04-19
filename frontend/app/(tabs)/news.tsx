@@ -22,7 +22,23 @@ export default function NewsScreen() {
   const [sourceType, setSourceType] = useState("");
   const [sourceName, setSourceName] = useState("");
   const [sources, setSources] = useState<SourceOption[]>([]);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const router = useRouter();
+
+  const formatLastUpdated = (iso?: string | null) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    const now = new Date();
+    const diffMin = Math.max(0, Math.round((now.getTime() - d.getTime()) / 60000));
+    if (diffMin < 1) return "עכשיו";
+    if (diffMin < 60) return `לפני ${diffMin} דק׳`;
+    const sameDay = d.toDateString() === now.toDateString();
+    const hh = d.getHours().toString().padStart(2, "0");
+    const mm = d.getMinutes().toString().padStart(2, "0");
+    if (sameDay) return `היום ${hh}:${mm}`;
+    return d.toLocaleString("he-IL", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  };
 
   const loadSources = useCallback(async () => {
     try {
@@ -30,6 +46,12 @@ export default function NewsScreen() {
       setSources(Array.isArray(s) ? s : []);
     } catch (e) {
       console.warn("sources", e);
+    }
+    try {
+      const st = await api.newsStatus();
+      setLastUpdated(st?.last_updated_at || null);
+    } catch (e) {
+      console.warn("status", e);
     }
   }, []);
 
@@ -69,7 +91,9 @@ export default function NewsScreen() {
       <View style={styles.header}>
         <Text style={styles.screenTitle}>חדשות מאילת</Text>
         <Text style={styles.screenSub}>
-          {list.length > 0 ? `${list.length} כתבות · מתעדכן אוטומטית כל שעה` : "עדכונים מהמקורות הרשמיים"}
+          {list.length > 0
+            ? `${list.length} כתבות · מתעדכן כל שעה${lastUpdated ? ` · עדכון אחרון ב-${formatLastUpdated(lastUpdated)}` : ""}`
+            : "עדכונים מהמקורות הרשמיים"}
         </Text>
       </View>
 

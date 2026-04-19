@@ -213,6 +213,21 @@ async def get_news_sources():
     return [{"source_name": d["_id"], "count": d["count"]} for d in docs]
 
 
+@api_router.get("/news/status")
+async def get_news_status():
+    """Return aggregate news feed status — including the last scrape time (max fetched_at)."""
+    last = await db.news.find_one(
+        {"fetched_at": {"$ne": None}},
+        sort=[("fetched_at", -1)],
+        projection={"_id": 0, "fetched_at": 1},
+    )
+    total = await db.news.count_documents({"published_at": {"$ne": None}})
+    return {
+        "last_updated_at": (last or {}).get("fetched_at"),
+        "total_articles": total,
+    }
+
+
 @api_router.get("/news/{article_id}")
 async def get_news_article(article_id: str):
     doc = await db.news.find_one({"id": article_id}, {"_id": 0})

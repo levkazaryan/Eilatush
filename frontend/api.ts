@@ -38,6 +38,10 @@ export const api = {
     const r = await fetch(`${API}/api/news/sources`);
     return r.json();
   },
+  async newsStatus() {
+    const r = await fetch(`${API}/api/news/status`);
+    return r.json();
+  },
   async chat(message: string, session_id?: string) {
     const r = await fetch(`${API}/api/eilatush/chat`, {
       method: "POST",
