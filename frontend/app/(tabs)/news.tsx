@@ -27,7 +27,10 @@ export default function NewsScreen() {
 
   const formatLastUpdated = (iso?: string | null) => {
     if (!iso) return "";
-    const d = new Date(iso);
+    // Backend stores UTC times. If the ISO string has no timezone suffix,
+    // append "Z" so JS parses it as UTC (not local).
+    const normalized = /[zZ]|[+-]\d{2}:?\d{2}$/.test(iso) ? iso : iso + "Z";
+    const d = new Date(normalized);
     if (isNaN(d.getTime())) return "";
     const now = new Date();
     const diffMin = Math.max(0, Math.round((now.getTime() - d.getTime()) / 60000));
