@@ -102,10 +102,22 @@
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
 
-user_problem_statement: "News feed showed all items as 'יום יום' with timestamp 'היום'. User wants: (1) source filter chips + correct source badges, (2) real article publication dates."
+user_problem_statement: "Build the Jobs page of the Eilatush app with (1) AI-categorized subject filter via dropdown, (2) date-uploaded filter, (3) more useful filter dimensions (job_type, experience, source), (4) dedup across sources, (5) hourly auto-scrape from 3+ approved Eilat job boards (eilatjobs.com, jobmaster.co.il, yomyom.net)."
 
 backend:
-  - task: "GET /api/news/sources returns distinct source names with counts"
+  - task: "Jobs scrapers package: eilatjobs + jobmaster + yomyom"
+    implemented: true
+    working: true
+    file: "/app/backend/jobs/sources/"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "main"
+        -comment: "Smoke-tested run_all_job_scrapers directly: returned 54 unique jobs (35 eilatjobs + 10 jobmaster + 9 yomyom) with title, description, phone, image, fingerprint, job_type hints."
+
+  - task: "Jobs API: /api/jobs (filtered), /jobs/categories, /jobs/sources, /jobs/status, /jobs/refresh"
     implemented: true
     working: true
     file: "/app/backend/server.py"
@@ -115,49 +127,73 @@ backend:
     status_history:
         -working: true
         -agent: "main"
-        -comment: "Verified via curl — returns 11 sources: אילת סיטי (51), יום יום (45), אייס מול אילת (29), Mako (25), כאן חדשות (25), עיריית אילת (15), Ynet (13), נמל אילת (9), plus 3 singletons."
+        -comment: "/api/jobs supports category, date_range (today|3d|week|month), job_type, experience, source filters. /jobs/categories returns 14-slug taxonomy + live counts; /jobs/sources returns per-source counts; /jobs/status returns last_updated_at. Verified via curl."
 
-  - task: "Scrapers extract real published_at from article pages"
+  - task: "AI job categorizer (Claude Sonnet 4.5 via Emergent LLM key)"
     implemented: true
     working: true
-    file: "/app/backend/scrapers.py"
+    file: "/app/backend/jobs/categorizer.py"
     stuck_count: 0
     priority: "high"
     needs_retesting: false
     status_history:
         -working: true
         -agent: "main"
-        -comment: "Fresh scrape confirms: Mako 25/25, Ynet 13/13, עיריית אילת 15/15, אייס מול אילת 29/29, נמל אילת 9/9 all carry REAL published_at (span months/years). Partial: יום יום 5/45 (most DB rows are ShowCat list pages — limitation of source). Pending: Kan (0/25) — article pages return 403 to httpx; would need Playwright for date enrichment."
+        -comment: "14 category taxonomy. Tagged 42/54 jobs on first run (78%). Scraper hints (job-type-hotels etc.) feed initial tags; LLM fills the rest. Tags are preserved across scrape cycles to avoid re-spending credits."
+
+  - task: "Dedup jobs across sources via fingerprint + source priority"
+    implemented: true
+    working: true
+    file: "/app/backend/jobs/registry.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "main"
+        -comment: "fingerprint = sha1(normalized_title + normalized_company). Duplicates collapse to the lowest-priority source; other sources recorded in 'also_in'. Default priorities: 10 official, 20 local, 30 national."
+
+  - task: "APScheduler hourly jobs scrape + startup kickoff"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "main"
+        -comment: "Added jobs_hourly interval=1h alongside existing news_hourly. Startup also purges stale demo jobs (no fingerprint) and kicks off the first scrape in background."
 
 frontend:
-  - task: "News screen — horizontal source filter chips"
+  - task: "Jobs screen — horizontal dropdown filter row + bottom-sheet modal"
     implemented: true
     working: true
-    file: "/app/frontend/app/(tabs)/news.tsx"
+    file: "/app/frontend/app/(tabs)/jobs.tsx"
     stuck_count: 0
     priority: "high"
     needs_retesting: false
     status_history:
         -working: true
         -agent: "main"
-        -comment: "Screenshot confirms two horizontal chip rows: (a) type filters (הכל / חדשות / מבזקים / אירועים); (b) source filters showing each source name + count. Tapping 'Ynet (13)' filters list to Ynet items and header count drops accordingly."
+        -comment: "Five dropdowns: תחום / תאריך / סוג משרה / ניסיון / מקור. Tapping any dropdown opens a native Modal styled as a bottom sheet with radio-style options + live counts. Selection closes the sheet and updates the list. Verified end-to-end: selecting מכירות drops count 54→7, cards show the 💰 מכירות pill."
 
-  - task: "Human-friendly Hebrew date display on news cards"
+  - task: "JobCard redesign: image, tag pill, source pill, job_type/experience badges, open-source button"
     implemented: true
     working: true
-    file: "/app/frontend/api.ts"
+    file: "/app/frontend/components.tsx"
     stuck_count: 0
     priority: "high"
     needs_retesting: false
     status_history:
         -working: true
         -agent: "main"
-        -comment: "Rewrote formatHebrewTime: past = 'לפני X דק׳ / לפני שעתיים / לפני 3 ימים / dd/mm/yy'; future (events) keeps original 'עכשיו / היום HH:MM / מחר HH:MM'. Screenshot shows 'לפני 8 דק׳', 'לפני 26 דק׳', 'לפני 37 דק׳', 'לפני 2 שעתיים' on the cards."
+        -comment: "Redesigned card renders hero image (when available), tag emoji-pill (מכירות/מלונאות/...), subtle source pill (עובדים באילת / JobMaster / לוח יום-יום), attribute badges (משרה מלאה / ללא ניסיון / salary), 'פתח במקור' button → WebBrowser.openBrowserAsync, plus phone + WhatsApp apply buttons. Also_in hint line when job is seen in multiple sources."
 
 metadata:
   created_by: "main_agent"
-  version: "1.1"
-  test_sequence: 2
+  version: "1.2"
+  test_sequence: 3
   run_ui: false
 
 test_plan:
@@ -168,4 +204,5 @@ test_plan:
 
 agent_communication:
     -agent: "main"
-    -message: "Verified the source-filter + real-date feature end-to-end. Backend `/api/news/sources` returns 11 sources; fresh scrape populated real dates for all major publishers. Frontend screenshot confirms filter chips + 'לפני X דק׳/שעות/ימים' display. Known gaps (not blocking): Kan articles still have null published_at (403 on httpx); some yomyom ShowCat list pages don't expose dates. Feature delivered."
+    -message: "Phase 1 (backend) + Phase 2 (UI) of Jobs feature shipped. 54 jobs from 3 sources (eilatjobs 35 + jobmaster 10 + yomyom 9), hourly scrape, Claude AI tagging (78% tagged on first pass), dedup via fingerprint. UI: 5 dropdowns + bottom-sheet modal with live counts. Matnasim blocked by Cloudflare (deferred). Muni bids are JS-rendered (deferred to Phase 3). Yomyom jobs are image-based and scraped as phone+image aggregates since we can't OCR the flyers."
+

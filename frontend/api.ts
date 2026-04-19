@@ -20,11 +20,34 @@ export const api = {
     const r = await fetch(`${API}/api/businesses?${qs.toString()}`);
     return r.json();
   },
-  async jobs(params: { urgency?: string; category?: string } = {}) {
+  async jobs(params: {
+    urgency?: string;
+    category?: string;
+    date_range?: string;
+    job_type?: string;
+    experience?: string;
+    source?: string;
+  } = {}) {
     const qs = new URLSearchParams();
     if (params.urgency) qs.set("urgency", params.urgency);
     if (params.category) qs.set("category", params.category);
+    if (params.date_range) qs.set("date_range", params.date_range);
+    if (params.job_type) qs.set("job_type", params.job_type);
+    if (params.experience) qs.set("experience", params.experience);
+    if (params.source) qs.set("source", params.source);
     const r = await fetch(`${API}/api/jobs?${qs.toString()}`);
+    return r.json();
+  },
+  async jobsCategories() {
+    const r = await fetch(`${API}/api/jobs/categories`);
+    return r.json();
+  },
+  async jobsSources() {
+    const r = await fetch(`${API}/api/jobs/sources`);
+    return r.json();
+  },
+  async jobsStatus() {
+    const r = await fetch(`${API}/api/jobs/status`);
     return r.json();
   },
   async news(params: { source?: string; source_name?: string; category?: string } = {}) {

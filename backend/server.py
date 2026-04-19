@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from scrapers import run_all_scrapers
+from jobs import run_all_job_scrapers
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -164,17 +165,113 @@ async def get_businesses(category: Optional[str] = None, open_now: Optional[bool
     return docs
 
 @api_router.get("/jobs")
-async def get_jobs(urgency: Optional[str] = None, category: Optional[str] = None):
+async def get_jobs(
+    urgency: Optional[str] = None,
+    category: Optional[str] = None,
+    date_range: Optional[str] = None,  # "today" | "3d" | "week" | "month"
+    job_type: Optional[str] = None,    # full_time | part_time | shifts | temporary | remote
+    experience: Optional[str] = None,  # none | required
+    source: Optional[str] = None,      # source slug (eilatjobs / jobmaster / yomyom / ...)
+):
     query: Dict[str, Any] = {}
     if urgency:
         query["urgency"] = urgency
     if category:
-        query["category"] = category
+        # tags is a list; match any
+        query["tags"] = category
+    if job_type:
+        query["job_type"] = job_type
+    if experience:
+        query["experience"] = experience
+    if source:
+        query["source"] = source
+    # date_range → posted_at lower-bound
+    if date_range in ("today", "3d", "week", "month"):
+        now = datetime.now(timezone.utc)
+        deltas = {"today": timedelta(days=1), "3d": timedelta(days=3),
+                  "week": timedelta(days=7), "month": timedelta(days=30)}
+        query["posted_at"] = {"$gte": now - deltas[date_range]}
     docs = await db.jobs.find(query, {"_id": 0}).to_list(500)
-    # sort: urgency (now > soon > this_week), newest first
-    order = {"now": 0, "soon": 1, "this_week": 2}
-    docs.sort(key=lambda d: (order.get(d.get("urgency", "soon"), 3), -d["posted_at"].timestamp() if isinstance(d["posted_at"], datetime) else 0))
+    # sort: scraped jobs (have `fingerprint`) show real posted_at desc; demo
+    # seeded jobs keep urgency-based ordering as a fallback.
+    def _key(d: Dict[str, Any]):
+        p = d.get("posted_at")
+        ts = -p.timestamp() if isinstance(p, datetime) else 0
+        return ts
+    docs.sort(key=_key)
+    # make sure `tags` is always present
+    for d in docs:
+        d.setdefault("tags", [])
+        d.setdefault("also_in", [])
     return docs
+
+
+@api_router.get("/jobs/categories")
+async def get_jobs_categories():
+    """Return the fixed jobs category taxonomy + counts per slug."""
+    try:
+        from jobs.categorizer import JOB_CATEGORIES
+    except Exception:
+        JOB_CATEGORIES = []
+
+    pipeline = [
+        {"$match": {"tags": {"$ne": None}}},
+        {"$unwind": "$tags"},
+        {"$group": {"_id": "$tags", "count": {"$sum": 1}}},
+    ]
+    counts: Dict[str, int] = {}
+    try:
+        docs = await db.jobs.aggregate(pipeline).to_list(100)
+        for d in docs:
+            counts[d["_id"]] = d["count"]
+    except Exception:
+        pass
+    total = await db.jobs.count_documents({})
+    out = [{"slug": "all", "label": "הכל", "emoji": "🧾", "count": total}]
+    for c in JOB_CATEGORIES:
+        out.append({
+            "slug": c["slug"],
+            "label": c["label"],
+            "emoji": c["emoji"],
+            "count": counts.get(c["slug"], 0),
+        })
+    return out
+
+
+@api_router.get("/jobs/sources")
+async def get_jobs_sources():
+    """Distinct job sources + counts."""
+    pipeline = [
+        {"$match": {"source": {"$exists": True, "$ne": None}}},
+        {"$group": {"_id": {"src": "$source", "name": "$source_name"}, "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+    ]
+    docs = await db.jobs.aggregate(pipeline).to_list(100)
+    return [
+        {"source": d["_id"]["src"], "source_name": d["_id"].get("name") or d["_id"]["src"], "count": d["count"]}
+        for d in docs
+    ]
+
+
+@api_router.get("/jobs/status")
+async def get_jobs_status():
+    last = await db.jobs.find_one(
+        {"fetched_at": {"$ne": None}},
+        sort=[("fetched_at", -1)],
+        projection={"_id": 0, "fetched_at": 1},
+    )
+    total = await db.jobs.count_documents({})
+    return {
+        "last_updated_at": (last or {}).get("fetched_at"),
+        "total_jobs": total,
+    }
+
+
+@api_router.post("/jobs/refresh")
+async def refresh_jobs_now():
+    """Manual trigger to run the jobs scrapers immediately."""
+    count = await _run_jobs_scrape()
+    return {"fetched": count}
 
 @api_router.get("/news")
 async def get_news(
@@ -702,85 +799,8 @@ async def seed_data():
         await db.businesses.insert_many(businesses)
 
     # --- Jobs ---
-    if await db.jobs.count_documents({}) == 0:
-        jobs = [
-            {
-                "id": str(uuid.uuid4()),
-                "title": "מלצר/ית משמרת ערב",
-                "company": "מלון רויאל ביץ'",
-                "category": "hotel",
-                "description": "דרוש/ה מלצר/ית למשמרת ערב החל מהיום. 45 ₪ לשעה + טיפים.",
-                "salary": "45 ₪ לשעה + טיפים",
-                "urgency": "now",
-                "location": "אילת – מלון רויאל ביץ'",
-                "phone": "+97286776655",
-                "whatsapp": "+972501112288",
-                "posted_at": now - timedelta(hours=2),
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "title": "דיילת קבלה",
-                "company": "מלון הרודס",
-                "category": "hotel",
-                "description": "משרה מלאה, משמרות בוקר/ערב. אנגלית חובה.",
-                "salary": "8,500-10,000 ₪",
-                "urgency": "soon",
-                "location": "אילת – מלון הרודס",
-                "whatsapp": "+972501114400",
-                "posted_at": now - timedelta(hours=8),
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "title": "בריסטה לבית קפה",
-                "company": "קפה דקל",
-                "category": "restaurant",
-                "description": "משמרות בוקר, יחס משפחתי, טיפים יפים.",
-                "salary": "42 ₪ לשעה + טיפים",
-                "urgency": "now",
-                "location": "אילת – שדרות התמרים 42",
-                "phone": "+97286112233",
-                "whatsapp": "+972501112255",
-                "posted_at": now - timedelta(hours=1),
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "title": "מדריך/ת צלילה PADI",
-                "company": "Dive Eilat",
-                "category": "tourism",
-                "description": "עבור עונת הקיץ, תעודת PADI חובה.",
-                "salary": "לפי הסכם",
-                "urgency": "this_week",
-                "location": "חוף הצלילה הדרומי",
-                "whatsapp": "+972501112299",
-                "posted_at": now - timedelta(days=1),
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "title": "קופאי/ת סופרמרקט",
-                "company": "סופר קינג",
-                "category": "retail",
-                "description": "עבודה במשמרות 24/7, שכר שעתי + תוספות.",
-                "salary": "38 ₪ לשעה",
-                "urgency": "soon",
-                "location": "אילת – מרכז הנמל",
-                "phone": "+97286221100",
-                "whatsapp": "+972501112277",
-                "posted_at": now - timedelta(hours=20),
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "title": "מאבטח/ת אירועים",
-                "company": "Sunset Beach Club",
-                "category": "service",
-                "description": "משמרת לילה היום! תעודת מאבטח חובה.",
-                "salary": "55 ₪ לשעה",
-                "urgency": "now",
-                "location": "חוף הדקל, אילת",
-                "whatsapp": "+972501234567",
-                "posted_at": now - timedelta(minutes=45),
-            },
-        ]
-        await db.jobs.insert_many(jobs)
+    # Demo jobs are NOT seeded. Jobs come only from real scrapers (run_all_job_scrapers).
+    # This keeps the `jobs` collection strictly sourced from user-approved websites.
 
     # --- News ---
     # Demo news is NOT seeded. News comes only from real scrapers (run_all_scrapers).
@@ -815,10 +835,16 @@ async def on_startup():
         await db.news.delete_many({"id": {"$not": {"$regex": "^[a-f0-9]{20}$"}}})
     except Exception:
         pass
+    # Clear legacy demo jobs — real scraped jobs always have a `fingerprint`.
+    try:
+        await db.jobs.delete_many({"fingerprint": {"$exists": False}})
+    except Exception:
+        pass
     # start scheduler + kick off first scrape in background
     _start_scheduler()
     import asyncio
     asyncio.create_task(_run_scrape_job())
+    asyncio.create_task(_run_jobs_scrape())
 
 
 async def _run_scrape_job() -> int:
@@ -881,9 +907,75 @@ async def _run_scrape_job() -> int:
 def _start_scheduler():
     scheduler = AsyncIOScheduler(timezone="UTC")
     scheduler.add_job(_run_scrape_job, "interval", hours=1, id="news_hourly", replace_existing=True)
+    scheduler.add_job(_run_jobs_scrape, "interval", hours=1, id="jobs_hourly", replace_existing=True)
     scheduler.start()
     app.state.scheduler = scheduler
-    logger.info("scheduler started (news every 1h)")
+    logger.info("scheduler started (news + jobs every 1h)")
+
+
+async def _run_jobs_scrape() -> int:
+    """Scrape all job sources, dedupe, auto-tag with Claude, upsert in Mongo."""
+    logger.info("jobs scrape job starting…")
+    try:
+        jobs = await run_all_job_scrapers()
+    except Exception as e:
+        logger.exception("jobs scrape failed: %s", e)
+        return 0
+    if not jobs:
+        logger.warning("jobs scrape produced 0 jobs")
+        return 0
+    # Auto-tag with Claude. Preserve tags for jobs already in DB with tags set,
+    # so we don't re-spend LLM credits on every run.
+    try:
+        from jobs.categorizer import tag_jobs_batch
+        existing_tags_by_id: Dict[str, List[str]] = {}
+        async for d in db.jobs.find(
+            {"tags": {"$exists": True}},
+            {"id": 1, "tags": 1, "_id": 0},
+        ):
+            existing_tags_by_id[d["id"]] = d.get("tags") or []
+        # We tag jobs where the DB has no tags, or the scraper returned empty tags.
+        to_tag: List[Dict[str, Any]] = []
+        for j in jobs:
+            existing = existing_tags_by_id.get(j["id"]) or []
+            scraper_tags = j.get("tags") or []
+            # Only add to llm queue if there are NO tags at all (neither DB nor scraper)
+            if not existing and not scraper_tags:
+                to_tag.append(j)
+        if to_tag:
+            logger.info("tagging %d new jobs with LLM…", len(to_tag))
+            tag_lists = await tag_jobs_batch(to_tag, concurrency=4)
+            for j, tags in zip(to_tag, tag_lists):
+                j["tags"] = list(set((j.get("tags") or []) + (tags or [])))
+        # Preserve existing tags for jobs already in DB (the scraper may have
+        # returned [] while a previous LLM call had real tags).
+        for j in jobs:
+            if j["id"] in existing_tags_by_id and not j.get("tags"):
+                j["tags"] = existing_tags_by_id[j["id"]]
+            j.setdefault("tags", [])
+    except Exception as e:
+        logger.exception("jobs auto-tag failed (non-fatal): %s", e)
+        for j in jobs:
+            j.setdefault("tags", [])
+    # Upsert by id (sha1 of source_url).
+    count = 0
+    scraped_ids: List[str] = []
+    for j in jobs:
+        await db.jobs.update_one({"id": j["id"]}, {"$set": j}, upsert=True)
+        scraped_ids.append(j["id"])
+        count += 1
+    # Purge jobs from our scrapers that weren't seen in this run (expired).
+    # Only delete docs that HAVE a fingerprint (= were scraped) AND weren't
+    # returned this cycle. Demo/seed jobs stay untouched.
+    try:
+        await db.jobs.delete_many({
+            "fingerprint": {"$exists": True},
+            "id": {"$nin": scraped_ids},
+        })
+    except Exception:
+        pass
+    logger.info("jobs scrape job done: %d jobs upserted", count)
+    return count
 
 
 @app.on_event("shutdown")

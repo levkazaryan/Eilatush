@@ -37,15 +37,24 @@ export type BusinessT = {
 export type JobT = {
   id: string;
   title: string;
-  company: string;
-  category: string;
+  company?: string | null;
+  category?: string;
   description: string;
-  salary?: string;
-  urgency: "now" | "soon" | "this_week";
+  salary?: string | null;
+  urgency?: "now" | "soon" | "this_week";
   location: string;
-  phone?: string;
-  whatsapp?: string;
+  phone?: string | null;
+  whatsapp?: string | null;
   posted_at: string;
+  // New fields from scrapers:
+  source?: string;
+  source_name?: string;
+  source_url?: string;
+  job_type?: "full_time" | "part_time" | "shifts" | "temporary" | "remote" | null;
+  experience?: "none" | "required" | null;
+  tags?: string[];
+  image?: string | null;
+  also_in?: string[];
 };
 
 export type NewsT = {
@@ -231,57 +240,127 @@ export function BusinessCard({ item }: { item: BusinessT }) {
   );
 }
 
-export function JobCard({ item }: { item: JobT }) {
-  const urg = item.urgency;
-  const urgColor = urg === "now" ? COLORS.primary : urg === "soon" ? COLORS.secondary : COLORS.textSecondary;
-  const urgBg = urg === "now" ? "rgba(230,57,70,0.10)" : urg === "soon" ? "rgba(20,184,179,0.10)" : "rgba(15,23,42,0.05)";
+const jobTypeLabel: Record<string, string> = {
+  full_time: "משרה מלאה",
+  part_time: "משרה חלקית",
+  shifts: "משמרות",
+  temporary: "זמני",
+  remote: "מהבית",
+};
+
+const expLabel: Record<string, string> = {
+  none: "ללא ניסיון",
+  required: "דרוש ניסיון",
+};
+
+const jobTagLabel: Record<string, { label: string; emoji: string }> = {
+  hotels: { label: "מלונאות", emoji: "🏨" },
+  restaurants: { label: "מסעדנות", emoji: "🍽️" },
+  sales: { label: "מכירות", emoji: "💰" },
+  retail: { label: "קמעונאות", emoji: "🛍️" },
+  tourism: { label: "תיירות", emoji: "🏖️" },
+  call_center: { label: "מוקד", emoji: "🎧" },
+  security: { label: "אבטחה", emoji: "🛡️" },
+  cleaning: { label: "ניקיון", emoji: "🧹" },
+  logistics: { label: "לוגיסטיקה", emoji: "🚚" },
+  office: { label: "משרד", emoji: "💼" },
+  health: { label: "בריאות", emoji: "🏥" },
+  education: { label: "חינוך", emoji: "📚" },
+  construction: { label: "בנייה", emoji: "🚧" },
+  tech: { label: "הייטק", emoji: "💻" },
+};
+
+export function JobCard({ item, onPress }: { item: JobT; onPress?: () => void }) {
+  const hasImage = !!item.image;
+  const primaryTag = (item.tags || [])[0];
+  const tagInfo = primaryTag ? jobTagLabel[primaryTag] : null;
+  const applyMsg = `היי, אני מהאפליקציה אילתוש ומעוניין/ת במשרה: ${item.title}`;
   return (
-    <View style={styles.jobCard} testID={`job-card-${item.id}`}>
-      <View style={styles.jobHeader}>
-        <View style={[styles.urgencyPill, { backgroundColor: urgBg }]}>
-          {urg === "now" && <View style={[styles.pulseDot, { backgroundColor: urgColor }]} />}
-          <Text style={[styles.urgencyText, { color: urgColor }]}>{urgencyLabel[urg]}</Text>
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.jobCard, pressed && { opacity: 0.85 }]} testID={`job-card-${item.id}`}>
+      {hasImage ? <Image source={{ uri: item.image as string }} style={styles.jobImage} /> : null}
+      <View style={styles.jobBody}>
+        <View style={styles.jobHeader}>
+          {tagInfo ? (
+            <View style={styles.jobTagPill}>
+              <Text style={styles.jobTagPillText}>{tagInfo.emoji} {tagInfo.label}</Text>
+            </View>
+          ) : null}
+          {item.source_name ? (
+            <View style={styles.jobSourcePill}>
+              <Ionicons name="open-outline" size={10} color={COLORS.textMuted} style={{ marginEnd: 3 }} />
+              <Text style={styles.jobSourceText} numberOfLines={1}>{item.source_name}</Text>
+            </View>
+          ) : null}
+          <View style={{ flex: 1 }} />
+          <Text style={styles.jobPosted}>{formatJobPosted(item.posted_at)}</Text>
         </View>
-        <Text style={styles.categoryPillSmall}>{categoryLabel[item.category] || item.category}</Text>
-        <View style={{ flex: 1 }} />
-        <Text style={styles.jobPosted}>{formatJobPosted(item.posted_at)}</Text>
-      </View>
-      <Text style={styles.jobTitle} numberOfLines={2}>
-        {item.title}
-      </Text>
-      <Text style={styles.jobCompany}>{item.company}</Text>
-      <Text style={styles.jobDesc} numberOfLines={3}>
-        {item.description}
-      </Text>
-      <View style={styles.jobFooter}>
-        {item.salary && (
-          <View style={styles.salaryPill}>
-            <Ionicons name="cash-outline" size={14} color={COLORS.secondary} />
-            <Text style={styles.salaryText}>{item.salary}</Text>
+        <Text style={styles.jobTitle} numberOfLines={2}>{item.title}</Text>
+        {item.company ? <Text style={styles.jobCompany}>{item.company}</Text> : null}
+        <Text style={styles.jobDesc} numberOfLines={3}>{item.description}</Text>
+
+        {/* Attribute badges row */}
+        {(item.job_type || item.experience || item.salary) ? (
+          <View style={styles.attrRow}>
+            {item.job_type && jobTypeLabel[item.job_type] ? (
+              <View style={styles.attrPill}>
+                <Ionicons name="time-outline" size={12} color={COLORS.textSecondary} />
+                <Text style={styles.attrText}>{jobTypeLabel[item.job_type]}</Text>
+              </View>
+            ) : null}
+            {item.experience && expLabel[item.experience] ? (
+              <View style={[styles.attrPill, item.experience === "none" && { backgroundColor: "rgba(20,184,179,0.10)", borderColor: "rgba(20,184,179,0.30)" }]}>
+                <Ionicons name="school-outline" size={12} color={item.experience === "none" ? COLORS.secondary : COLORS.textSecondary} />
+                <Text style={[styles.attrText, item.experience === "none" && { color: COLORS.secondary }]}>{expLabel[item.experience]}</Text>
+              </View>
+            ) : null}
+            {item.salary ? (
+              <View style={styles.salaryPill}>
+                <Ionicons name="cash-outline" size={12} color={COLORS.secondary} />
+                <Text style={styles.salaryText}>{item.salary}</Text>
+              </View>
+            ) : null}
           </View>
-        )}
-        <View style={{ flex: 1 }} />
-        {item.phone && (
-          <TouchableOpacity
-            style={styles.iconBtn}
-            onPress={() => openPhone(item.phone)}
-            testID={`job-call-${item.id}`}
-          >
-            <Ionicons name="call" size={16} color="#fff" />
-          </TouchableOpacity>
-        )}
-        {item.whatsapp && (
-          <TouchableOpacity
-            style={[styles.applyBtn]}
-            onPress={() => openWhatsApp(item.whatsapp, `היי, אני מהאפליקציה אילתוש ומעוניין/ת במשרה: ${item.title}`)}
-            testID={`job-apply-${item.id}`}
-          >
-            <Ionicons name="logo-whatsapp" size={16} color="#fff" />
-            <Text style={styles.applyBtnText}>הגש מועמדות</Text>
-          </TouchableOpacity>
-        )}
+        ) : null}
+
+        {item.also_in && item.also_in.length > 0 ? (
+          <Text style={styles.alsoInText} numberOfLines={1}>
+            גם ב־{item.also_in.slice(0, 2).join(" · ")}
+          </Text>
+        ) : null}
+
+        <View style={styles.jobFooter}>
+          {item.source_url ? (
+            <Pressable
+              onPress={(e: any) => { e?.stopPropagation?.(); item.source_url && require("./api").openLink(item.source_url); }}
+              style={styles.openSourceBtn}
+            >
+              <Ionicons name="open-outline" size={14} color={COLORS.primary} />
+              <Text style={styles.openSourceText}>פתח במקור</Text>
+            </Pressable>
+          ) : null}
+          <View style={{ flex: 1 }} />
+          {item.phone ? (
+            <TouchableOpacity
+              style={styles.iconBtn}
+              onPress={(e: any) => { e?.stopPropagation?.(); openPhone(item.phone as string); }}
+              testID={`job-call-${item.id}`}
+            >
+              <Ionicons name="call" size={16} color="#fff" />
+            </TouchableOpacity>
+          ) : null}
+          {item.whatsapp ? (
+            <TouchableOpacity
+              style={styles.applyBtn}
+              onPress={(e: any) => { e?.stopPropagation?.(); openWhatsApp(item.whatsapp as string, applyMsg); }}
+              testID={`job-apply-${item.id}`}
+            >
+              <Ionicons name="logo-whatsapp" size={16} color="#fff" />
+              <Text style={styles.applyBtnText}>הגש מועמדות</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -536,18 +615,39 @@ const styles = StyleSheet.create({
   jobCard: {
     backgroundColor: COLORS.card,
     borderRadius: RADIUS.lg,
-    padding: SPACING.md,
     marginHorizontal: SPACING.md,
     marginBottom: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
+    overflow: "hidden",
     shadowColor: "#0F172A",
     shadowOpacity: 0.05,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
+  jobImage: { width: "100%", height: 130 },
+  jobBody: { padding: SPACING.md },
   jobHeader: { flexDirection: "row-reverse", alignItems: "center", gap: 6, flexWrap: "wrap" },
+  jobTagPill: {
+    backgroundColor: "rgba(230,57,70,0.10)",
+    borderRadius: RADIUS.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: "rgba(230,57,70,0.30)",
+  },
+  jobTagPillText: { color: COLORS.primary, fontSize: 11, fontWeight: "800" },
+  jobSourcePill: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    backgroundColor: "rgba(15,23,42,0.05)",
+    borderRadius: RADIUS.sm,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    maxWidth: 140,
+  },
+  jobSourceText: { color: COLORS.textMuted, fontSize: 10, fontWeight: "700" },
   urgencyPill: {
     flexDirection: "row-reverse",
     alignItems: "center",
@@ -574,6 +674,38 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   salaryText: { color: COLORS.secondary, fontSize: 12, fontWeight: "800" },
+  attrRow: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 10,
+  },
+  attrPill: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    backgroundColor: "rgba(15,23,42,0.05)",
+    borderColor: "rgba(15,23,42,0.12)",
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: RADIUS.pill,
+    gap: 4,
+  },
+  attrText: { color: COLORS.textSecondary, fontSize: 11, fontWeight: "700" },
+  alsoInText: { color: COLORS.textMuted, fontSize: 11, marginTop: 6, textAlign: "right", fontStyle: "italic" },
+  openSourceBtn: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: RADIUS.pill,
+    backgroundColor: "rgba(230,57,70,0.07)",
+    borderWidth: 1,
+    borderColor: "rgba(230,57,70,0.25)",
+  },
+  openSourceText: { color: COLORS.primary, fontSize: 12, fontWeight: "800" },
   applyBtn: {
     flexDirection: "row-reverse",
     alignItems: "center",
