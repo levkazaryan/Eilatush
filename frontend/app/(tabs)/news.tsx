@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, RefreshControl, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -24,6 +24,8 @@ export default function NewsScreen() {
   const [sources, setSources] = useState<SourceOption[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const router = useRouter();
+  const typeScrollRef = useRef<ScrollView | null>(null);
+  const srcScrollRef = useRef<ScrollView | null>(null);
 
   const formatLastUpdated = (iso?: string | null) => {
     if (!iso) return "";
@@ -102,7 +104,18 @@ export default function NewsScreen() {
 
       {/* Source type filter */}
       <View style={styles.chipsRow}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: SPACING.md, flexDirection: "row-reverse" }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          ref={(r) => { typeScrollRef.current = r; }}
+          onContentSizeChange={() => typeScrollRef.current?.scrollToEnd({ animated: false })}
+          contentContainerStyle={{
+            paddingHorizontal: SPACING.md,
+            flexDirection: "row-reverse",
+            justifyContent: "flex-end",
+            flexGrow: 1,
+          }}
+        >
           {TYPES.map((s) => (
             <FilterChip
               key={s.key || "all"}
@@ -118,7 +131,18 @@ export default function NewsScreen() {
       {/* Source name filter */}
       {sources.length > 0 && (
         <View style={[styles.chipsRow, { paddingTop: 4 }]}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: SPACING.md, flexDirection: "row-reverse" }}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            ref={(r) => { srcScrollRef.current = r; }}
+            onContentSizeChange={() => srcScrollRef.current?.scrollToEnd({ animated: false })}
+            contentContainerStyle={{
+              paddingHorizontal: SPACING.md,
+              flexDirection: "row-reverse",
+              justifyContent: "flex-end",
+              flexGrow: 1,
+            }}
+          >
             <FilterChip
               label="כל המקורות"
               active={sourceName === ""}
