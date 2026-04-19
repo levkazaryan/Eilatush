@@ -27,15 +27,20 @@ export const api = {
     const r = await fetch(`${API}/api/jobs?${qs.toString()}`);
     return r.json();
   },
-  async news(params: { source?: string; source_name?: string } = {}) {
+  async news(params: { source?: string; source_name?: string; category?: string } = {}) {
     const qs = new URLSearchParams();
     if (params.source) qs.set("source", params.source);
     if (params.source_name) qs.set("source_name", params.source_name);
+    if (params.category) qs.set("category", params.category);
     const r = await fetch(`${API}/api/news?${qs.toString()}`);
     return r.json();
   },
   async newsSources() {
     const r = await fetch(`${API}/api/news/sources`);
+    return r.json();
+  },
+  async newsCategories() {
+    const r = await fetch(`${API}/api/news/categories`);
     return r.json();
   },
   async newsStatus() {

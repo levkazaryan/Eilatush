@@ -177,7 +177,11 @@ async def get_jobs(urgency: Optional[str] = None, category: Optional[str] = None
     return docs
 
 @api_router.get("/news")
-async def get_news(source: Optional[str] = None, source_name: Optional[str] = None):
+async def get_news(
+    source: Optional[str] = None,
+    source_name: Optional[str] = None,
+    category: Optional[str] = None,
+):
     query: Dict[str, Any] = {
         # only return real articles that have a publication date
         "published_at": {"$ne": None},
@@ -186,6 +190,10 @@ async def get_news(source: Optional[str] = None, source_name: Optional[str] = No
         query["source_type"] = source
     if source_name:
         query["source_name"] = source_name
+    if category:
+        # Articles can carry multiple tags; match any article whose `tags`
+        # array contains the requested slug.
+        query["tags"] = category
     docs = await db.news.find(query, {"_id": 0}).to_list(500)
     # Sort by real published_at (newest → oldest)
     def _key(d):
@@ -207,7 +215,46 @@ async def get_news(source: Optional[str] = None, source_name: Optional[str] = No
                 if plain:
                     d["summary"] = plain[:280]
         d.pop("content_html", None)
+        # make sure `tags` is always present (empty list for legacy docs)
+        d.setdefault("tags", [])
     return docs
+
+
+@api_router.get("/news/categories")
+async def get_news_categories():
+    """Return the fixed category taxonomy (slug + Hebrew label + emoji) along
+    with the live count of articles per category. Frontend uses this to render
+    the chip row."""
+    try:
+        from categorizer import CATEGORIES
+    except Exception:
+        CATEGORIES = []
+
+    pipeline = [
+        {"$match": {"published_at": {"$ne": None}, "tags": {"$ne": None}}},
+        {"$unwind": "$tags"},
+        {"$group": {"_id": "$tags", "count": {"$sum": 1}}},
+    ]
+    counts: Dict[str, int] = {}
+    try:
+        docs = await db.news.aggregate(pipeline).to_list(100)
+        for d in docs:
+            counts[d["_id"]] = d["count"]
+    except Exception:
+        pass
+
+    total = await db.news.count_documents({"published_at": {"$ne": None}})
+    out = [
+        {"slug": "all", "label": "הכל", "emoji": "📰", "count": total},
+    ]
+    for c in CATEGORIES:
+        out.append({
+            "slug": c["slug"],
+            "label": c["label"],
+            "emoji": c["emoji"],
+            "count": counts.get(c["slug"], 0),
+        })
+    return out
 
 
 @api_router.get("/news/sources")
@@ -784,6 +831,32 @@ async def _run_scrape_job() -> int:
     if not articles:
         logger.warning("scrape job produced 0 articles")
         return 0
+    # ---- Auto-tag newly-fetched articles that aren't in DB yet (or lack tags).
+    # This uses Claude Sonnet via the Emergent universal LLM key. Articles that
+    # already have tags stay untouched so we don't re-spend LLM credits.
+    try:
+        from categorizer import tag_articles_batch
+        existing_tagged_ids = {
+            d["id"]
+            for d in await db.news.find(
+                {"tags": {"$exists": True, "$ne": []}},
+                {"id": 1, "_id": 0},
+            ).to_list(length=None)
+        }
+        to_tag = [a for a in articles if a["id"] not in existing_tagged_ids]
+        if to_tag:
+            logger.info("tagging %d new articles…", len(to_tag))
+            tag_lists = await tag_articles_batch(to_tag, concurrency=4)
+            for a, tags in zip(to_tag, tag_lists):
+                a["tags"] = tags
+        # Articles already in DB keep their existing tags — just make sure any
+        # article without explicit tags gets an empty list (for consistent API).
+        for a in articles:
+            a.setdefault("tags", [])
+    except Exception as e:
+        logger.exception("auto-tagging failed (non-fatal): %s", e)
+        for a in articles:
+            a.setdefault("tags", [])
     # upsert by id (sha1 of source_url)
     count = 0
     for a in articles:
