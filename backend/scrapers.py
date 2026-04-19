@@ -1162,9 +1162,17 @@ async def _scrape_tag_page(
         title = a.get("title", "") or ""
         summary = a.get("summary", "") or ""
         body_head = a.get("_body_head", "") or ""
-        hay = title + " " + summary + " " + body_head[:500]
-        if not _contains_eilat(hay):
-            log.info("dropping off-topic %s: %s", source_name, title[:60])
+        # Strengthened Eilat-relevance: Eilat must be present either in the
+        # TITLE or in the first ~300 chars of summary/body (not buried at the
+        # end of a long newsletter that only mentions Eilat in passing).
+        eilat_near_top = (
+            _contains_eilat(title)
+            or _contains_eilat((summary or "")[:300])
+            or _contains_eilat((body_head or "")[:300])
+        )
+        if not eilat_near_top:
+            log.info("dropping off-topic %s (Eilat not near top): %s",
+                     source_name, title[:60])
             continue
         # Skip digest pages: title explicitly names a *different* Israeli city
         # and Eilat is absent from the title → this is a weekly newsletter
@@ -1173,6 +1181,17 @@ async def _scrape_tag_page(
             log.info("dropping digest %s (title mentions other city): %s",
                      source_name, title[:60])
             continue
+        # Detect Globes/newsletter digest bodies: they start with a
+        # list number immediately followed by the article's own title
+        # (e.g. "1 בבילינסון מנסים...").
+        if re.match(r"^\s*\d{1,2}\s+\S", body_head):
+            # If the numbered digest's numbered title doesn't mention Eilat,
+            # drop it — we only want standalone Eilat articles.
+            first_sentence = body_head.split(".")[0][:200]
+            if not _contains_eilat(title) and not _contains_eilat(first_sentence):
+                log.info("dropping digest %s (numbered list body, no Eilat in title/first sentence): %s",
+                         source_name, title[:60])
+                continue
         a.pop("_body_head", None)  # strip internal field
         kept.append(a)
     return kept
