@@ -89,7 +89,11 @@ export const openLink = (url?: string) => {
 
 export const formatHebrewTime = (iso?: string | null): string => {
   if (!iso) return "";
-  const d = new Date(iso);
+  // Backend stores UTC. If the ISO string lacks a timezone suffix, append "Z"
+  // so JS parses it as UTC (not local time), otherwise the "time ago" will
+  // drift by the local timezone offset (2-3 hours off in Israel).
+  const normalized = /[zZ]|[+-]\d{2}:?\d{2}$/.test(iso) ? iso : iso + "Z";
+  const d = new Date(normalized);
   if (isNaN(d.getTime())) return "";
   const now = new Date();
   const diffMs = d.getTime() - now.getTime();

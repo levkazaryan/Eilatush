@@ -97,7 +97,7 @@ export default function NewsScreen() {
         <Text style={styles.screenTitle}>חדשות מאילת</Text>
         <Text style={styles.screenSub}>
           {list.length > 0
-            ? `${list.length} כתבות · מתעדכן כל שעה${lastUpdated ? ` · עדכון אחרון ב-${formatLastUpdated(lastUpdated)}` : ""}`
+            ? `${list.length} כתבות · מתעדכן כל שעה${lastUpdated ? ` · נבדק ${formatLastUpdated(lastUpdated)}` : ""}`
             : "עדכונים מהמקורות הרשמיים"}
         </Text>
       </View>
