@@ -1,20 +1,28 @@
-"""Scraper for https://yomyom.net/article.asp?id=61445 — "מדור בעלי מקצוע ונותני שירותים".
+"""Scraper for yomyom.net professionals listings.
 
-Same physical-flyer format as `yomyom_jobs`: each professional ad is an image
-with a `tel:+972...` link underneath. We re-use the jobs OCR pipeline
-(Tesseract → Claude Sonnet JSON) but prompt the LLM to extract a PROFESSIONAL
-record (service provider) rather than a job.
+Multiple source articles (all physical-flyer format):
+  • 61445 — "מדור בעלי מקצוע ונותני שירותים"  (general services)
+  • 61463 — "לוח הנדל"ן והתיווך"                 (real-estate brokers)
+
+Each ad is a flyer image with contact details printed ON the flyer. A
+subset of flyers also have a separate `<a href="tel:…">ליצירת קשר…</a>` link
+in the DOM, but many don't — so we iterate *flyers* as the source of truth
+and recover the phone from OCR or from the nearest tel: link.
+
+Pipeline:
+  flyer img → Tesseract heb+eng OCR → Claude Sonnet 4.5 JSON extraction
+  (name, subtitle, description, category slug, phone, email) → professional
+  record.
 """
 from __future__ import annotations
 
 import asyncio
 import io
 import json
-import logging
 import os
 import re
 import uuid
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin
 
 import httpx
@@ -23,17 +31,21 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from PIL import Image
 
-from ..base import _fetch, _make_professional, _strip, log
+from ..base import _fetch, _make_professional, _normalize_phone, log
 
 load_dotenv()
 
-_URL = "https://yomyom.net/article.asp?id=61445"
 _BASE = "https://yomyom.net"
+
+# (article_id, short human label)
+_ARTICLES: List[Dict[str, str]] = [
+    {"id": "61445", "label": "בעלי מקצוע"},
+    {"id": "61463", "label": "נדל״ן ותיווך"},
+]
 
 
 # ---------------------------------------------------------------------------
-# OCR helpers (same logic as jobs yomyom — duplicated here to keep package
-# boundaries clean)
+# OCR + LLM helpers
 # ---------------------------------------------------------------------------
 def _ocr_image(raw: bytes) -> str:
     try:
@@ -51,7 +63,7 @@ _LLM_SYSTEM = """You are a Hebrew OCR cleanup assistant for an Eilat local-servi
 
 You receive raw OCR output from a physical flyer that advertises a PROFESSIONAL
 / SERVICE PROVIDER in Eilat (plumber, electrician, contractor, carpenter,
-renovator, lawyer, tutor, cleaning service, etc.).
+renovator, lawyer, real-estate broker, tutor, cleaning service, etc.).
 
 OCR output is often garbled. Read through it, figure out what the flyer says,
 and return single-line JSON with these keys:
@@ -60,7 +72,8 @@ and return single-line JSON with these keys:
     "name":        "<short name of the professional or business — e.g. 'דוד האינסטלטור' or 'שיפוצים מני'>",
     "subtitle":    "<short tagline or trade — e.g. 'אינסטלציה ופתיחת סתימות'>",
     "description": "<2-3 short clear Hebrew sentences about the services offered>",
-    "category":    "<ONE English slug from: construction, electrician, plumber, ac, appliance_fix, carpentry, sealing, cleaning_pro, gardening, moving, locksmith, pest, auto_repair, tutor, therapy, health_pro, lawyer, accountant, tech_pro, graphics, photo, events_pro, beauty_home>",
+    "category":    "<ONE English slug from: construction, electrician, plumber, ac, appliance_fix, carpentry, sealing, cleaning_pro, gardening, moving, locksmith, pest, auto_repair, tutor, therapy, health_pro, lawyer, accountant, tech_pro, graphics, photo, events_pro, beauty_home, realestate>",
+    "phone":       "<the main contact phone number as it appears, digits only or in 05x-xxx-xxxx format. Must be an Israeli number. null if none visible.>",
     "email":       "<email if one appears on the flyer, else null>"
   }
 
@@ -69,6 +82,7 @@ RULES:
  - Use clean Hebrew. Fix obvious OCR mistakes.
  - If you cannot find any coherent name, return name="" (empty string).
  - Keep name SHORT — 2-6 words.
+ - Phone: choose the main one (mobile 05x preferred over landline). Strip any WhatsApp suffix.
  - Prefer a real category slug from the list; if nothing fits, set category=null.
 """
 
@@ -97,7 +111,7 @@ async def _llm_extract(ocr_text: str) -> Optional[Dict[str, Any]]:
     try:
         data = json.loads(txt)
     except json.JSONDecodeError:
-        m = re.search(r"\{[^}]*\}", txt, re.DOTALL)
+        m = re.search(r"\{.*\}", txt, re.DOTALL)
         if not m:
             return None
         try:
@@ -111,89 +125,52 @@ async def _llm_extract(ocr_text: str) -> Optional[Dict[str, Any]]:
         "subtitle": (data.get("subtitle") or "").strip()[:150] or None,
         "description": (data.get("description") or "").strip()[:600],
         "category": (data.get("category") or "").strip().lower() or None,
+        "phone": (data.get("phone") or "").strip() or None,
         "email": (data.get("email") or None),
     }
 
 
-async def _extract_one(
-    client: httpx.AsyncClient,
-    phone: str,
-    img_src: Optional[str],
-    existing: Dict[str, Dict[str, Any]],
-) -> Optional[Dict[str, Any]]:
-    source_url = f"{_URL}#phone-{re.sub(r'[^0-9+]', '', phone)}"
-    # Short-circuit: reuse cached record if already OCR'd with a real name.
-    cached = existing.get(source_url)
-    if cached and cached.get("name") and not cached["name"].startswith("איש מקצוע #"):
-        return _make_professional(
-            name=cached.get("name") or "",
-            subtitle=cached.get("subtitle"),
-            description=cached.get("description") or "",
-            source_url=source_url,
-            source="yomyom_pros",
-            source_name="יום-יום אילת",
-            phone=phone,
-            email=cached.get("email"),
-            image=img_src,
-            category_hint=cached.get("category_hint"),
-            tags=[cached["category_hint"]] if cached.get("category_hint") else [],
-        )
+# ---------------------------------------------------------------------------
+# DOM helpers
+# ---------------------------------------------------------------------------
+_PHONE_RX = re.compile(r"(?:\+972[\-\s]?|0)(?:5\d|[2-47-9])[\-\s]?\d{3}[\-\s]?\d{4}")
 
-    name = ""
-    subtitle = None
-    description = ""
-    category_hint = None
-    email = None
 
-    if img_src:
-        try:
-            ir = await client.get(img_src, timeout=20)
-            if ir.status_code == 200 and len(ir.content) > 500:
-                ocr_text = await asyncio.to_thread(_ocr_image, ir.content)
-                if ocr_text.strip():
-                    llm = await _llm_extract(ocr_text)
-                    if llm and llm.get("name"):
-                        name = llm["name"]
-                        subtitle = llm.get("subtitle")
-                        description = llm.get("description") or ""
-                        category_hint = llm.get("category")
-                        email = llm.get("email")
-                if not email:
-                    m = re.search(
-                        r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",
-                        ocr_text,
-                    )
-                    if m:
-                        email = m.group(0)
-        except Exception as e:
-            log.warning("yomyom-pros OCR/LLM error for img %s: %s", img_src, e)
-
-    if not name:
-        # If no useful OCR, skip this flyer entirely to avoid placeholder spam.
+def _extract_phone_from_ocr(text: str) -> Optional[str]:
+    """Pull the first plausible Israeli phone number out of an OCR dump."""
+    if not text:
         return None
-    if not description:
-        description = "איש מקצוע באילת — הפרטים על העלון. התקשר/י ישירות למפרסם."
+    for m in _PHONE_RX.finditer(text):
+        raw = m.group(0)
+        norm = _normalize_phone(raw)
+        if norm:
+            return norm
+    return None
 
-    rec = _make_professional(
-        name=name,
-        subtitle=subtitle,
-        description=description,
-        source_url=source_url,
-        source="yomyom_pros",
-        source_name="יום-יום אילת",
-        phone=phone,
-        email=email,
-        image=img_src,
-        category_hint=category_hint,
-        tags=[category_hint] if category_hint else [],
-    )
-    return rec
+
+def _find_nearby_tel(img_tag) -> Optional[str]:
+    """Look at the image's DOM neighborhood (next 20 siblings, then parent)
+    for a tel: link. Used as an additional hint when OCR misses the number."""
+    nxt = img_tag
+    for _ in range(30):
+        nxt = nxt.find_next()
+        if nxt is None:
+            break
+        if getattr(nxt, "name", None) == "a" and (nxt.get("href") or "").lower().startswith("tel:"):
+            phone = nxt["href"].split(":", 1)[1].strip()
+            phone = re.sub(r"^[a-z]+://", "", phone, flags=re.I)
+            return phone
+        if getattr(nxt, "name", None) == "img" and "UploadImg" in (nxt.get("src") or ""):
+            # next flyer reached without seeing a tel: link — give up
+            break
+    return None
 
 
 async def _load_existing(client: httpx.AsyncClient) -> Dict[str, Dict[str, Any]]:
     try:
         r = await client.get(
-            "http://localhost:8001/api/businesses?source=yomyom_pros&type=professional&limit=500",
+            "http://localhost:8001/api/businesses"
+            "?source=yomyom_pros&type=professional&limit=500",
             timeout=5,
         )
         if r.status_code != 200:
@@ -208,47 +185,136 @@ async def _load_existing(client: httpx.AsyncClient) -> Dict[str, Dict[str, Any]]
         return {}
 
 
+# ---------------------------------------------------------------------------
+# Per-flyer extraction
+# ---------------------------------------------------------------------------
+async def _extract_flyer(
+    client: httpx.AsyncClient,
+    article_id: str,
+    img_src: str,
+    flyer_index: int,
+    nearby_phone_hint: Optional[str],
+    existing: Dict[str, Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    # Stable key per flyer image so upserts don't create duplicates.
+    slug_key = re.sub(r"[^a-zA-Z0-9]+", "-", img_src.split("/")[-1])[:60]
+    source_url = f"{_BASE}/article.asp?id={article_id}#flyer-{flyer_index}-{slug_key}"
+
+    # Short-circuit: previously OCR'd record with a real name → reuse.
+    cached = existing.get(source_url)
+    if cached and cached.get("name") and not cached["name"].startswith("איש מקצוע #"):
+        return _make_professional(
+            name=cached.get("name") or "",
+            subtitle=cached.get("subtitle"),
+            description=cached.get("description") or "",
+            source_url=source_url,
+            source="yomyom_pros",
+            source_name="יום-יום אילת",
+            phone=cached.get("phone") or nearby_phone_hint,
+            email=cached.get("email"),
+            image=img_src,
+            category_hint=cached.get("category_hint") or (cached.get("tags") or [None])[0],
+            tags=[t for t in (cached.get("tags") or []) if t],
+        )
+
+    # Fetch + OCR.
+    try:
+        ir = await client.get(img_src, timeout=20)
+    except Exception as e:
+        log.warning("yomyom-pros img fetch error %s: %s", img_src, e)
+        return None
+    if ir.status_code != 200 or len(ir.content) < 500:
+        return None
+    ocr_text = await asyncio.to_thread(_ocr_image, ir.content)
+    if not ocr_text.strip():
+        return None
+
+    llm = await _llm_extract(ocr_text)
+
+    name = (llm or {}).get("name") or ""
+    if not name:
+        # useless flyer (sidebar ad, decoration, etc.) — skip
+        return None
+
+    subtitle = (llm or {}).get("subtitle")
+    description = (llm or {}).get("description") or ""
+    category = (llm or {}).get("category")
+    email = (llm or {}).get("email")
+
+    # Phone priority: LLM > nearby DOM tel: > OCR regex
+    phone = _normalize_phone((llm or {}).get("phone")) \
+        or _normalize_phone(nearby_phone_hint) \
+        or _extract_phone_from_ocr(ocr_text)
+
+    if not email:
+        m = re.search(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", ocr_text)
+        if m:
+            email = m.group(0)
+
+    if not description:
+        description = "איש מקצוע באילת — הפרטים על העלון. התקשר/י ישירות למפרסם."
+
+    return _make_professional(
+        name=name,
+        subtitle=subtitle,
+        description=description,
+        source_url=source_url,
+        source="yomyom_pros",
+        source_name="יום-יום אילת",
+        phone=phone,
+        email=email,
+        image=img_src,
+        category_hint=category,
+        tags=[category] if category else [],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Main entry
+# ---------------------------------------------------------------------------
 async def scrape_yomyom_professionals(client: httpx.AsyncClient) -> List[Dict[str, Any]]:
-    html = await _fetch(client, _URL)
-    if not html:
-        return []
-    soup = BeautifulSoup(html, "lxml")
-
-    # Each ad is a flyer image followed by a tel: link saying "ליצירת קשר..."
-    pairs: List[Tuple[str, Optional[str]]] = []
-    seen_phones: set = set()
-    for a in soup.find_all("a", href=True):
-        h = a["href"].lower()
-        if not h.startswith("tel:"):
-            continue
-        phone = a["href"].split(":", 1)[1].strip()
-        phone = re.sub(r"^[a-z]+://", "", phone, flags=re.I)
-        if not phone or phone in seen_phones:
-            continue
-        seen_phones.add(phone)
-        # Find the previous flyer image (walk DOM backwards)
-        img_src = None
-        prev = a
-        for _ in range(30):
-            prev = prev.find_previous()
-            if prev is None:
-                break
-            if getattr(prev, "name", None) == "img":
-                src = prev.get("src") or ""
-                if src and "UploadImg" in src and ".jpg" in src.lower():
-                    img_src = urljoin(_BASE, src)
-                    break
-        pairs.append((phone, img_src))
-
     existing = await _load_existing(client)
-    # OCR + LLM are expensive — limit concurrency to 3.
-    sem = asyncio.Semaphore(3)
+    sem = asyncio.Semaphore(3)  # OCR + LLM is heavy
 
-    async def worker(p: str, i: Optional[str]) -> Optional[Dict[str, Any]]:
-        async with sem:
-            return await _extract_one(client, p, i, existing)
+    async def run_article(art: Dict[str, str]) -> List[Dict[str, Any]]:
+        url = f"{_BASE}/article.asp?id={art['id']}"
+        html = await _fetch(client, url)
+        if not html:
+            return []
+        soup = BeautifulSoup(html, "lxml")
+        # Only keep flyer images that are inside the article body — filter out
+        # site-header / sidebar thumbnails by requiring UploadImg + .jpg.
+        flyers = []
+        for im in soup.find_all("img", src=True):
+            src = im.get("src") or ""
+            if "UploadImg" in src and ".jpg" in src.lower():
+                flyers.append(im)
+        log.info("yomyom_pros article %s (%s): %d flyers", art["id"], art["label"], len(flyers))
 
-    results = await asyncio.gather(*[worker(p, i) for p, i in pairs])
-    pros = [r for r in results if r]
-    log.info("yomyom_pros (OCR) → %d professionals", len(pros))
-    return pros
+        async def worker(idx: int, img_tag) -> Optional[Dict[str, Any]]:
+            async with sem:
+                nearby = _find_nearby_tel(img_tag)
+                return await _extract_flyer(
+                    client,
+                    art["id"],
+                    urljoin(_BASE, img_tag["src"]),
+                    idx,
+                    nearby,
+                    existing,
+                )
+
+        results = await asyncio.gather(
+            *[worker(i, f) for i, f in enumerate(flyers)]
+        )
+        return [r for r in results if r]
+
+    all_pros: List[Dict[str, Any]] = []
+    for art in _ARTICLES:
+        try:
+            pros = await run_article(art)
+            all_pros.extend(pros)
+        except Exception as e:
+            log.exception("yomyom_pros article %s failed: %s", art["id"], e)
+
+    log.info("yomyom_pros total → %d professionals", len(all_pros))
+    return all_pros

@@ -178,8 +178,6 @@ export function EventCard({ item }: { item: EventT }) {
   );
 }
 
-// Business category slug → {label, emoji}. Synced with backend
-// /app/backend/businesses/categorizer.py (BUSINESS_CATEGORIES).
 export const BIZ_CATEGORY: Record<string, { label: string; emoji: string }> = {
   restaurants:     { label: "מסעדות",          emoji: "🍽️" },
   cafes:           { label: "בתי קפה",         emoji: "☕" },
@@ -226,6 +224,7 @@ export const BIZ_CATEGORY: Record<string, { label: string; emoji: string }> = {
   photo:           { label: "צילום",           emoji: "📷" },
   events_pro:      { label: "אירועים",         emoji: "🎉" },
   beauty_home:     { label: "יופי ביתי",        emoji: "💇" },
+  realestate:      { label: "נדל״ן ותיווך",      emoji: "🏠" },
 };
 
 export function BusinessCard({ item, onPress }: { item: BusinessT; onPress?: () => void }) {

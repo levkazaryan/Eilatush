@@ -947,7 +947,7 @@ async def _run_jobs_scrape() -> int:
 
 
 async def _run_businesses_scrape() -> int:
-    """Scrape all business/professional sources, dedupe, auto-tag, upsert."""
+    """Scrape all business/professional sources, dedupe, upsert, then tag."""
     logger.info("businesses scrape job starting…")
     try:
         items = await run_all_business_scrapers()
@@ -957,50 +957,31 @@ async def _run_businesses_scrape() -> int:
     if not items:
         logger.warning("businesses scrape produced 0 items")
         return 0
-    # Auto-tag with Claude. Run the LLM on every item so it can refine the
-    # scraper-hint tags (e.g. a diving center that eilat.city files under
-    # "attractions" should also get `marine`; a barber under "spa" should get
-    # `beauty`). Previously-tagged items are preserved and merged with new ones.
+
+    # Preserve any existing LLM tags so re-scrape doesn't lose them.
+    existing_tags_by_id: Dict[str, List[str]] = {}
     try:
-        from businesses.categorizer import tag_records_batch
-        existing_tags_by_id: Dict[str, List[str]] = {}
         async for d in db.businesses.find(
             {"tags": {"$exists": True}},
             {"id": 1, "tags": 1, "_id": 0},
         ):
-            existing_tags_by_id[d["id"]] = d.get("tags") or []
-        # Only re-tag items where we don't already have a stored LLM result
-        # that has MORE than just the single scraper-hint tag. This is a proxy
-        # for "did the LLM already run on this item".
-        to_tag: List[Dict[str, Any]] = []
-        for it in items:
-            existing = existing_tags_by_id.get(it["id"]) or []
-            if len(existing) >= 2:
-                # LLM has already enriched this item; keep what we have.
-                it["tags"] = existing
-                continue
-            to_tag.append(it)
-        if to_tag:
-            logger.info("tagging %d businesses/pros with LLM…", len(to_tag))
-            tag_lists = await tag_records_batch(to_tag, concurrency=6)
-            for it, tags in zip(to_tag, tag_lists):
-                merged = list(dict.fromkeys((tags or []) + (it.get("tags") or [])))
-                it["tags"] = merged[:3]  # cap at 3 tags per item
-        for it in items:
+            if d.get("tags"):
+                existing_tags_by_id[d["id"]] = d.get("tags") or []
+    except Exception:
+        pass
+    for it in items:
+        if it["id"] in existing_tags_by_id:
+            it["tags"] = existing_tags_by_id[it["id"]]
+        else:
             it.setdefault("tags", [])
-    except Exception as e:
-        logger.exception("businesses auto-tag failed (non-fatal): %s", e)
-        for it in items:
-            it.setdefault("tags", [])
-    # Upsert by id.
+
+    # --- Upsert FIRST so data is visible on the app immediately. ---
     count = 0
     scraped_ids: List[str] = []
     for it in items:
         await db.businesses.update_one({"id": it["id"]}, {"$set": it}, upsert=True)
         scraped_ids.append(it["id"])
         count += 1
-    # Purge stale scraped records (fingerprint exists = was scraped previously
-    # but missing from this run).
     try:
         await db.businesses.delete_many({
             "fingerprint": {"$exists": True},
@@ -1008,7 +989,29 @@ async def _run_businesses_scrape() -> int:
         })
     except Exception:
         pass
-    logger.info("businesses scrape job done: %d items upserted", count)
+    logger.info("businesses upsert done: %d items in DB", count)
+
+    # --- Then LLM-tag only items that still have fewer than 2 tags. ---
+    try:
+        from businesses.categorizer import tag_records_batch
+        to_tag = [it for it in items if len(it.get("tags") or []) < 2]
+        if to_tag:
+            logger.info("tagging %d businesses/pros with LLM…", len(to_tag))
+            tag_lists = await tag_records_batch(to_tag, concurrency=6)
+            for it, tags in zip(to_tag, tag_lists):
+                merged = list(dict.fromkeys((tags or []) + (it.get("tags") or [])))
+                it["tags"] = merged[:3]
+                # Stream results to DB as they arrive (item-by-item update).
+                try:
+                    await db.businesses.update_one(
+                        {"id": it["id"]}, {"$set": {"tags": it["tags"]}}
+                    )
+                except Exception:
+                    pass
+    except Exception as e:
+        logger.exception("businesses auto-tag failed (non-fatal): %s", e)
+
+    logger.info("businesses scrape job done: %d items upserted+tagged", count)
     return count
 
 

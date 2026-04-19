@@ -105,17 +105,17 @@
 user_problem_statement: "Build the Businesses & Professionals section of the Eilatush app. Scrape real Eilat data (no paid APIs): eilat.city for businesses (1 image each), yomyom.net for professionals (OCR on flyers, 0 required images). AI-categorize with Claude Sonnet 4.5, dedup across sources, weekly refresh. Expose filter/toggle between 'עסקים' and 'אנשי מקצוע' in the UI."
 
 backend:
-  - task: "Businesses & Professionals scraper package (eilat.city + yomyom pros OCR)"
+  - task: "Businesses & Professionals scraper package (eilat.city + yomyom pros OCR, multi-article)"
     implemented: true
     working: true
-    file: "/app/backend/businesses/"
+    file: "/app/backend/businesses/sources/yomyom_pros.py"
     stuck_count: 0
     priority: "high"
     needs_retesting: false
     status_history:
         -working: true
         -agent: "main"
-        -comment: "New /app/backend/businesses/ module mirroring jobs/ architecture. eilat_city.py iterates 17 /list/<category> pages × 4 pages each, extracts .c-media-object cards, follows each to detail page for phone/address/opening-hours/description. Returned 796 real Eilat businesses across 17 categories. yomyom_pros.py reuses the tesseract+Claude pipeline from yomyom_jobs.py but with a system prompt geared for service providers — returned 11 professionals from article 61445 (builder, mover, plumber, handyman ads). Registry orchestrates + dedupes by fingerprint (normalized name + last 7 phone digits) separately per type. Totals after first run: 796 businesses + 11 professionals = 807 upserts."
+        -comment: "ROUND 2: Enhanced yomyom_pros to (a) iterate flyer images — not tel: links — as the source of truth, recovering phones from OCR text when there's no nearby tel: link in the DOM, (b) scrape multiple articles (61445 'בעלי מקצוע' + 61463 'נדל״ן ותיווך'), (c) LLM prompt now also extracts the phone number and supports the new `realestate` category slug. Also: upsert-first, tag-later pipeline in `_run_businesses_scrape()` — data is visible in the app immediately and LLM categorization streams results to the DB as each call completes, instead of waiting for the whole batch. Added `realestate` slug to PROFESSIONAL_CATEGORIES taxonomy + BIZ_CATEGORY frontend map. Final count: 796 businesses + 12 real professionals (construction × 5, moving × 3, lawyer × 2, carpentry × 1, realestate × 1), all with +972-normalized phone numbers."
 
   - task: "Businesses AI categorizer (21 business + 23 professional slugs via Claude Sonnet 4.5)"
     implemented: true

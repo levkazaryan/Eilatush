@@ -76,6 +76,7 @@ PROFESSIONAL_CATEGORIES: List[Dict[str, str]] = [
     {"slug": "photo",          "label": "צילום",                "emoji": "📷"},
     {"slug": "events_pro",     "label": "אירועים והפקות",        "emoji": "🎉"},
     {"slug": "beauty_home",    "label": "יופי ופרטי",            "emoji": "💇"},
+    {"slug": "realestate",     "label": "נדל״ן ותיווך",           "emoji": "🏠"},
 ]
 
 PROFESSIONAL_SLUGS = {c["slug"] for c in PROFESSIONAL_CATEGORIES}
@@ -157,6 +158,7 @@ Categorise each service-provider / professional into one or more of these 23 fix
   photo         — Photographers, videographers, events photo
   events_pro    — Event planners, DJs, producers, party rentals
   beauty_home   — Mobile hairdressers, nail techs, private cosmeticians
+  realestate    — Real estate brokers, apartment rentals, property sales
 
 RULES:
  - Return ONLY a valid JSON array of category slugs. No prose, no markdown.
