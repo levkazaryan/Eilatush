@@ -8,6 +8,7 @@ import httpx
 from .base import HEADERS, TIMEOUT, log
 from .sources import (
     scrape_eilat_city,
+    scrape_eilat_muni,
     scrape_yomyom_professionals,
 )
 
@@ -17,6 +18,7 @@ from .sources import (
 #   20 — local Eilat-specific
 #   30 — national aggregator
 SCRAPERS: List = [
+    ("eilat_muni",  scrape_eilat_muni,             10),  # official, highest priority
     ("eilat_city",  scrape_eilat_city,             20),
     ("yomyom_pros", scrape_yomyom_professionals,   20),
 ]
