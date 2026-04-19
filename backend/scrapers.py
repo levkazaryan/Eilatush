@@ -1548,6 +1548,48 @@ async def scrape_site_articles(
         seen.add(full)
         candidates.append(full)
 
+    # ---- Yomyom gap-fill: probe article IDs beyond the highest found on
+    # the homepage. Yomyom sometimes publishes articles that aren't yet
+    # featured on the home/front page, so relying on homepage links alone
+    # misses fresh stories. We probe up to +20 consecutive IDs and stop after
+    # 5 consecutive misses (empty/404 responses). Found IDs are *prepended*
+    # to the candidates list so they're not starved by the max_items cap.
+    if "yomyom.net" in base_url:
+        existing_ids = []
+        for u in candidates:
+            m = re.search(r"article\.asp\?id=(\d+)", u)
+            if m:
+                existing_ids.append(int(m.group(1)))
+        if existing_ids:
+            max_id = max(existing_ids)
+            gapfill: List[str] = []
+            miss_streak = 0
+            for probe_id in range(max_id + 1, max_id + 21):
+                if miss_streak >= 5:
+                    break
+                probe_url = f"https://www.yomyom.net/article.asp?id={probe_id}"
+                if probe_url in seen:
+                    continue
+                try:
+                    body = await _fetch(client, probe_url)
+                except Exception:
+                    body = None
+                if not body or len(body) < 2000:
+                    miss_streak += 1
+                    continue
+                # quick relevance check before queueing full enrichment
+                if "אילת" not in body:
+                    miss_streak += 1
+                    continue
+                miss_streak = 0
+                seen.add(probe_url)
+                gapfill.append(probe_url)
+                log.info("yomyom gap-fill added id=%d", probe_id)
+            # Prepend so newest-discovered articles are processed ahead of the
+            # (already-scraped) homepage URLs and aren't dropped by max_items.
+            if gapfill:
+                candidates = gapfill + candidates
+
     out: List[Dict[str, Any]] = []
     for url in candidates:
         if len(out) >= max_items:
