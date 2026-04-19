@@ -396,9 +396,19 @@ async def _enrich_dates(client: httpx.AsyncClient, articles: List[Dict[str, Any]
         # always fetch so we can populate _body_head for off-topic filter
         async with sem:
             try:
-                meta = await _article_meta(client, a["source_url"], use_browser=False)
-                if not meta and use_browser:
-                    meta = await _article_meta(client, a["source_url"], use_browser=True)
+                # Fetch with browser up-front when requested — many JS-rendered
+                # sites (Maariv / Globes) return a minimal server-rendered
+                # shell to plain httpx that lacks the real article body, so
+                # the Eilat filter would incorrectly drop the article.
+                meta = await _article_meta(
+                    client, a["source_url"], use_browser=use_browser
+                )
+                # Last-resort fallback: if we requested browser but it somehow
+                # failed, try the httpx path too.
+                if not meta:
+                    meta = await _article_meta(
+                        client, a["source_url"], use_browser=not use_browser
+                    )
                 if meta.get("published_at") and needs_date:
                     a["published_at"] = meta["published_at"]
                 if meta.get("title") and needs_title:
@@ -1218,6 +1228,10 @@ async def scrape_maariv_eilat(client: httpx.AsyncClient) -> List[Dict[str, Any]]
         link_pattern=re.compile(r"maariv\.co\.il/.+/article-\d+"),
         host_whitelist=["maariv.co.il"],
         max_items=25,
+        # Maariv article pages render the body via JS — httpx gets the
+        # placeholder "חוקרי המשטרה המזועזעים…" shell while Playwright
+        # gets the real opening paragraph containing Eilat context.
+        enrich_use_browser=True,
     )
 
 
@@ -1230,6 +1244,8 @@ async def scrape_globes_eilat(client: httpx.AsyncClient) -> List[Dict[str, Any]]
         link_pattern=re.compile(r"globes\.co\.il/news/article\.aspx\?did=\d+"),
         host_whitelist=["globes.co.il"],
         max_items=25,
+        # Same JS-rendering concern as Maariv — use Playwright for enrichment.
+        enrich_use_browser=True,
     )
 
 
