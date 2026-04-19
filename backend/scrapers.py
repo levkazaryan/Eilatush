@@ -1182,6 +1182,12 @@ async def scrape_site_articles(
             if not _contains_eilat(title + " " + summary + " " + body_text):
                 continue
 
+        # Skip yomyom column/section aggregator pages (multiple mini-articles
+        # bundled together — not real articles). Title pattern: "מדור ..." /
+        # "מותק - מדור ..." / "מדור בעלי מקצוע..."
+        if source_name == "יום יום" and re.search(r"\bמדור\b", title):
+            continue
+
         if not summary:
             summary = body_text[:300] if body_text else title
 

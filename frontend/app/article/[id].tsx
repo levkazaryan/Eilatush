@@ -114,7 +114,17 @@ export default function ArticleScreen() {
     const textBlock = b.find((x) => x.kind === "text" && (x as any).text && (x as any).text.length > 40) as
       | { kind: "text"; text: string }
       | undefined;
-    return textBlock?.text || "";
+    const p = textBlock?.text || "";
+    // avoid duplicating content that's already in the summary (same opening 80 chars)
+    const s = (article?.summary || "").trim();
+    if (p && s) {
+      const pHead = p.slice(0, 80).replace(/\s+/g, " ");
+      const sHead = s.slice(0, 80).replace(/\s+/g, " ");
+      if (pHead === sHead || s.includes(p.slice(0, 60)) || p.includes(s.slice(0, 60))) {
+        return "";
+      }
+    }
+    return p;
   }, [article]);
 
   return (
