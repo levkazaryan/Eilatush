@@ -1235,7 +1235,8 @@ async def scrape_facebook_eilat_muni(client: httpx.AsyncClient) -> List[Dict[str
 
 SCRAPERS = [
     ("eilat_muni_articles", scrape_eilat_muni_articles),
-    ("eilat_muni_mivzak", scrape_eilat_muni_mivzak),
+    # Note: eilat_muni_mivzak removed — the municipality "breaking news" bulletin
+    # turned out to be operational notices (beach hours etc.), not real news.
     ("smarticket_events", scrape_smarticket),
     ("ynet_eilat", scrape_ynet_eilat),
     ("mako_eilat", scrape_mako_eilat),
@@ -1256,9 +1257,10 @@ SINGLE_PAGE_SOURCES: List = []  # not used any longer — all sources are full-s
 FULL_SITE_SOURCES = [
     # Eilat-only domains → no keyword filter (everything IS Eilat)
     ("https://icemalleilat.co.il/", "אייס מול אילת", "event", None, None, 40, False, False),
-    ("https://biz.eilat.muni.il/", "עסקים — עיריית אילת", "news", None, None, 40, False, False),
     # Note: נמל אילת (eilatport.co.il) removed — only publishes tenders/procurement notices
     # with no real news content (per user feedback).
+    # Note: biz.eilat.muni.il removed — static about-us pages for the municipal business
+    # department, not news articles.
     # יום יום (regional) — exclude category listing pages (ShowCat.asp = "places")
     # and magazine/PDF bookshelf pages (vmag/mag subdomains) which aren't articles.
     ("https://www.yomyom.net/", "יום יום", "news", None,
