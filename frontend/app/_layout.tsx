@@ -1,3 +1,5 @@
+'use client';
+
 import { useEffect } from "react";
 import { Stack } from "expo-router";
 import { I18nManager, Platform } from "react-native";

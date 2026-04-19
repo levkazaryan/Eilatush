@@ -1,3 +1,5 @@
+'use client';
+
 import React from "react";
 import { Tabs } from "expo-router";
 import { View, Text, StyleSheet, Platform, Image } from "react-native";
