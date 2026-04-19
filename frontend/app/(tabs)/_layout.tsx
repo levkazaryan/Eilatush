@@ -61,13 +61,11 @@ export default function TabsLayout() {
           title: "אילתוש",
           tabBarIcon: ({ focused }) => (
             <View style={styles.centerItem} testID="tab-eilatush">
-              <View style={[styles.centerMascotWrap, focused && styles.centerMascotWrapActive]}>
-                <Image
-                  source={EILATUSH_MASCOT}
-                  style={styles.centerMascotImg}
-                  resizeMode="contain"
-                />
-              </View>
+              <Image
+                source={EILATUSH_MASCOT}
+                style={[styles.centerMascotImg, focused && styles.centerMascotImgActive]}
+                resizeMode="contain"
+              />
               <Text
                 numberOfLines={1}
                 style={[styles.tabLabel, styles.centerLabel, { color: focused ? COLORS.primary : COLORS.textMuted }]}
@@ -142,28 +140,16 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primaryHover,
   },
   centerMascotWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    // deprecated — kept for backward-compat in case anything still imports it
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FFFFFF",
-    shadowColor: "#000",
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 6,
   },
-  centerMascotWrapActive: {
-    shadowColor: COLORS.primary,
-    shadowOpacity: 0.45,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 10,
-    transform: [{ scale: 1.05 }],
-  },
+  centerMascotWrapActive: {},
   centerMascotImg: {
-    width: 54,
-    height: 54,
+    width: 68,
+    height: 68,
+  },
+  centerMascotImgActive: {
+    transform: [{ scale: 1.08 }],
   },
 });
