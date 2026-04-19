@@ -957,7 +957,10 @@ async def _run_businesses_scrape() -> int:
     if not items:
         logger.warning("businesses scrape produced 0 items")
         return 0
-    # Auto-tag with Claude. Preserve existing tags to save LLM credits.
+    # Auto-tag with Claude. Run the LLM on every item so it can refine the
+    # scraper-hint tags (e.g. a diving center that eilat.city files under
+    # "attractions" should also get `marine`; a barber under "spa" should get
+    # `beauty`). Previously-tagged items are preserved and merged with new ones.
     try:
         from businesses.categorizer import tag_records_batch
         existing_tags_by_id: Dict[str, List[str]] = {}
@@ -966,20 +969,24 @@ async def _run_businesses_scrape() -> int:
             {"id": 1, "tags": 1, "_id": 0},
         ):
             existing_tags_by_id[d["id"]] = d.get("tags") or []
+        # Only re-tag items where we don't already have a stored LLM result
+        # that has MORE than just the single scraper-hint tag. This is a proxy
+        # for "did the LLM already run on this item".
         to_tag: List[Dict[str, Any]] = []
         for it in items:
             existing = existing_tags_by_id.get(it["id"]) or []
-            scraper_tags = it.get("tags") or []
-            if not existing and not scraper_tags:
-                to_tag.append(it)
+            if len(existing) >= 2:
+                # LLM has already enriched this item; keep what we have.
+                it["tags"] = existing
+                continue
+            to_tag.append(it)
         if to_tag:
-            logger.info("tagging %d new businesses/pros with LLM…", len(to_tag))
-            tag_lists = await tag_records_batch(to_tag, concurrency=4)
+            logger.info("tagging %d businesses/pros with LLM…", len(to_tag))
+            tag_lists = await tag_records_batch(to_tag, concurrency=6)
             for it, tags in zip(to_tag, tag_lists):
-                it["tags"] = list(set((it.get("tags") or []) + (tags or [])))
+                merged = list(dict.fromkeys((tags or []) + (it.get("tags") or [])))
+                it["tags"] = merged[:3]  # cap at 3 tags per item
         for it in items:
-            if it["id"] in existing_tags_by_id and not it.get("tags"):
-                it["tags"] = existing_tags_by_id[it["id"]]
             it.setdefault("tags", [])
     except Exception as e:
         logger.exception("businesses auto-tag failed (non-fatal): %s", e)
