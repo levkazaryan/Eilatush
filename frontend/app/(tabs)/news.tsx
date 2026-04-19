@@ -107,14 +107,12 @@ export default function NewsScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          ref={(r) => { typeScrollRef.current = r; }}
-          onContentSizeChange={() => typeScrollRef.current?.scrollToEnd({ animated: false })}
           contentContainerStyle={{
             paddingHorizontal: SPACING.md,
-            flexDirection: "row-reverse",
-            justifyContent: "flex-end",
-            flexGrow: 1,
+            flexDirection: "row",
+            justifyContent: "flex-start",
           }}
+          style={{ direction: "rtl" as any }}
         >
           {TYPES.map((s) => (
             <FilterChip
@@ -134,14 +132,12 @@ export default function NewsScreen() {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            ref={(r) => { srcScrollRef.current = r; }}
-            onContentSizeChange={() => srcScrollRef.current?.scrollToEnd({ animated: false })}
             contentContainerStyle={{
               paddingHorizontal: SPACING.md,
-              flexDirection: "row-reverse",
-              justifyContent: "flex-end",
-              flexGrow: 1,
+              flexDirection: "row",
+              justifyContent: "flex-start",
             }}
+            style={{ direction: "rtl" as any }}
           >
             <FilterChip
               label="כל המקורות"
