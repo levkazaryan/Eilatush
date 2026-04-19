@@ -88,36 +88,73 @@ def _fingerprint(title: str, company: Optional[str] = None) -> str:
 # ---------------------------------------------------------------------------
 def _detect_job_type(text: str) -> Optional[str]:
     """Return one of: full_time | part_time | shifts | temporary | remote | None.
-    Uses simple Hebrew keyword matching."""
+    Uses Hebrew keyword matching with multi-pattern support.
+    Priority order matters: shifts > remote > part_time > temporary > full_time.
+    """
     if not text:
         return None
     t = text.lower()
-    if any(k in text for k in ["מהבית", "עבודה מרחוק", "מרחוק"]) or "remote" in t:
-        return "remote"
-    if any(k in text for k in ["משמרות", "משמרת בוקר", "משמרת ערב", "משמרת לילה", "משמרת", "shifts"]):
+    # --- shifts (strong indicator for Eilat hotels/restaurants/retail)
+    if any(k in text for k in [
+        "משמרות", "משמרת בוקר", "משמרת ערב", "משמרת לילה",
+        "משמרת", "בוקר/ערב", "ערב/לילה", "במשמרות",
+    ]) or "shifts" in t:
         return "shifts"
-    if any(k in text for k in ["משרה חלקית", "חצי משרה", "פרילאנס", "פרילנס"]):
+    # --- remote
+    if any(k in text for k in [
+        "מהבית", "עבודה מרחוק", "work from home", "wfh",
+    ]) or "remote" in t:
+        return "remote"
+    # --- part_time
+    if any(k in text for k in [
+        "משרה חלקית", "חצי משרה", "75% משרה", "60% משרה", "50% משרה",
+        "פרילאנסר", "פרילנס", "עצמאי", "מספר שעות ביום",
+        "חלקית (", "גם כחלקית",
+    ]):
         return "part_time"
-    if any(k in text for k in ["נוער/ת", "זמני", "עונתי", "פרויקט", "החלפה"]):
+    # --- temporary / seasonal
+    if any(k in text for k in [
+        "נוער/ת", "נוער", "זמני", "עונתי", "פרויקט",
+        "החלפה", "החלפות", "לחופשת קיץ", "לקיץ", "לחופש",
+        "לתקופה מוגבלת", "לתקופה קצרה",
+    ]):
         return "temporary"
-    if any(k in text for k in ["משרה מלאה", "100%"]):
+    # --- full_time
+    if any(k in text for k in [
+        "משרה מלאה", "100% משרה", "משרה מלאה!", "משרה מלאה בלבד",
+        "5/6 ימים בשבוע", "6 ימים בשבוע", "5 ימים בשבוע",
+        "שעות מלאות", "ימים א׳-ה׳", "א'-ה'",
+    ]) or "100%" in text:
         return "full_time"
     return None
 
 
-_EXP_YEARS_RE = re.compile(r"(\d+)\s*שנ[יות]{0,3}.{0,12}ניסיון")
+_EXP_YEARS_RE = re.compile(r"(\d+)\s*[-–]?\s*(\d*)\s*שנ[יותא]{0,5}.{0,15}ניסיון")
+_EXP_PLUS_RE = re.compile(r"ניסיון\s+של\s+(\d+)")
 
 
 def _detect_experience(text: str) -> Optional[str]:
-    """Return one of: none | required | None (not mentioned)."""
+    """Return one of: none | required | None."""
     if not text:
         return None
-    # "ללא ניסיון" / "גם ללא ניסיון"
-    if any(k in text for k in ["ללא ניסיון", "לא דרוש ניסיון", "לא נדרש ניסיון", "לא חובה ניסיון"]):
+    # No-experience flags — return early (strongest signal)
+    if any(k in text for k in [
+        "ללא ניסיון", "לא נדרש ניסיון", "לא דרוש ניסיון",
+        "לא חובה ניסיון", "לא חייב ניסיון", "לא חובה",
+        "גם ללא ניסיון", "גם לבלי ניסיון",
+        "מתאים גם לחסרי ניסיון", "מתאים לסטודנטים",
+        "הכשרה", "נלמד את כל הנדרש", "מלמדים מאפס",
+        "קורס הכשרה",
+    ]):
         return "none"
-    if any(k in text for k in ["ניסיון חובה", "ניסיון דרוש", "ניסיון נדרש"]):
+    # Required experience
+    if any(k in text for k in [
+        "ניסיון חובה", "ניסיון נדרש", "דרוש/ה ניסיון",
+        "ניסיון קודם", "חובה ניסיון", "חובה – ניסיון",
+        "עם ניסיון", "ניסיון מוכח", "ידע וניסיון",
+    ]):
         return "required"
-    if _EXP_YEARS_RE.search(text):
+    if _EXP_YEARS_RE.search(text) or _EXP_PLUS_RE.search(text):
         return "required"
     return None
 

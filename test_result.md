@@ -190,6 +190,30 @@ frontend:
         -agent: "main"
         -comment: "Redesigned card renders hero image (when available), tag emoji-pill (מכירות/מלונאות/...), subtle source pill (עובדים באילת / JobMaster / לוח יום-יום), attribute badges (משרה מלאה / ללא ניסיון / salary), 'פתח במקור' button → WebBrowser.openBrowserAsync, plus phone + WhatsApp apply buttons. Also_in hint line when job is seen in multiple sources."
 
+  - task: "Internal job detail screen /job/[id]"
+    implemented: true
+    working: true
+    file: "/app/frontend/app/job/[id].tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "main"
+        -comment: "New internal route replaces raw external link. Renders hero image, title, company, location, ALL category tags (not just first), all attribute badges (job_type/experience/salary), full description, open-original-source link, and a sticky bottom bar with call + WhatsApp apply. JobCard onPress now routes to this screen. Added GET /api/jobs/{id} + api.job(id)."
+
+  - task: "Improved Hebrew heuristics for job_type and experience detection"
+    implemented: true
+    working: true
+    file: "/app/backend/jobs/base.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "main"
+        -comment: "Expanded job_type keywords (שני משמרות, 5 ימים בשבוע, ימים א׳-ה׳, חלקית(, 100% משרה...) and experience keywords (מתאים לסטודנטים, נלמד את כל הנדרש, ידע וניסיון, ניסיון קודם, ...). Experience detection improved from 1/54 → 5/54 jobs tagged."
+
 metadata:
   created_by: "main_agent"
   version: "1.2"

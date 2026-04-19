@@ -50,6 +50,11 @@ export const api = {
     const r = await fetch(`${API}/api/jobs/status`);
     return r.json();
   },
+  async job(id: string) {
+    const r = await fetch(`${API}/api/jobs/${id}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  },
   async news(params: { source?: string; source_name?: string; category?: string } = {}) {
     const qs = new URLSearchParams();
     if (params.source) qs.set("source", params.source);

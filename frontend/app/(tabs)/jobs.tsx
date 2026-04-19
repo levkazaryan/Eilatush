@@ -12,7 +12,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { api, openLink } from "../../api";
+import { useRouter } from "expo-router";
+import { api } from "../../api";
 import { COLORS, RADIUS, SPACING } from "../../theme";
 import { JobCard, JobT, EmptyState } from "../../components";
 
@@ -47,6 +48,7 @@ export default function JobsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const router = useRouter();
 
   // Filters
   const [category, setCategory] = useState("");
@@ -225,7 +227,7 @@ export default function JobsScreen() {
             <JobCard
               key={j.id}
               item={j}
-              onPress={() => j.source_url && openLink(j.source_url)}
+              onPress={() => router.push(`/job/${j.id}`)}
             />
           ))
         )}
