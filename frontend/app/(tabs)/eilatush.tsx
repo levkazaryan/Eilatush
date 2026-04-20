@@ -167,7 +167,10 @@ export default function EilatushScreen() {
         },
       ]);
       setSessionId(undefined);
-      AsyncStorage.multiRemove([STORAGE_KEY, SESSION_KEY]).catch(() => {});
+      Promise.all([
+        AsyncStorage.removeItem(STORAGE_KEY),
+        AsyncStorage.removeItem(SESSION_KEY),
+      ]).catch(() => {});
     };
     if (Platform.OS === "web") {
       doClear();
@@ -236,6 +239,17 @@ export default function EilatushScreen() {
             </View>
             <View style={styles.headerActions}>
               <Pressable
+                onPress={clearChat}
+                style={({ pressed }) => [
+                  styles.headerIconBtn,
+                  pressed && { opacity: 0.6 },
+                ]}
+                accessibilityLabel="שיחה חדשה"
+                testID="header-clear"
+              >
+                <Ionicons name="refresh" size={20} color={COLORS.primary} />
+              </Pressable>
+              <Pressable
                 onPress={inviteFriend}
                 style={({ pressed }) => [
                   styles.headerIconBtn,
@@ -295,47 +309,53 @@ export default function EilatushScreen() {
                         ))}
                       </View>
                     )}
+                    {m.followUps && m.followUps.length > 0 && !loading && (
+                      <View style={styles.sugWrap}>
+                        {m.followUps.slice(0, 6).map((s) => (
+                          <Pressable
+                            key={`${m.id}-fu-${s}`}
+                            onPress={() => send(s)}
+                            style={({ pressed }) => [styles.sugChip, pressed && { opacity: 0.7 }]}
+                            testID={`followup-${s}`}
+                          >
+                            <Ionicons
+                              name="sparkles-outline"
+                              size={12}
+                              color={COLORS.secondary}
+                              style={{ marginStart: 4 }}
+                            />
+                            <Text style={styles.sugChipText}>{s}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    )}
                     {m.id === "welcome" && (
-                      <>
-                        <View style={styles.sugWrap}>
-                          {SUGGESTIONS.map((s) => (
-                            <Pressable
-                              key={s}
-                              onPress={() => send(s)}
-                              style={({ pressed }) => [styles.sugChip, pressed && { opacity: 0.7 }]}
-                              testID={`suggestion-${s}`}
-                            >
-                              <Text style={styles.sugChipText}>{s}</Text>
-                            </Pressable>
-                          ))}
-                        </View>
-                        <View style={styles.ctaRow}>
-                          <Pressable
-                            onPress={inviteFriend}
-                            style={({ pressed }) => [
-                              styles.ctaChip,
-                              styles.ctaInvite,
-                              pressed && { opacity: 0.75 },
-                            ]}
-                            testID="welcome-invite"
-                          >
-                            <Ionicons name="share-social" size={15} color={COLORS.primary} />
-                            <Text style={[styles.ctaText, { color: COLORS.primary }]}>הזמן חבר</Text>
-                          </Pressable>
-                          <Pressable
-                            onPress={openWhatsApp}
-                            style={({ pressed }) => [
-                              styles.ctaChip,
-                              styles.ctaContact,
-                              pressed && { opacity: 0.85 },
-                            ]}
-                            testID="welcome-contact"
-                          >
-                            <Ionicons name="logo-whatsapp" size={15} color="#fff" />
-                            <Text style={[styles.ctaText, { color: "#fff" }]}>צור קשר</Text>
-                          </Pressable>
-                        </View>
-                      </>
+                      <View style={styles.ctaRow}>
+                        <Pressable
+                          onPress={inviteFriend}
+                          style={({ pressed }) => [
+                            styles.ctaChip,
+                            styles.ctaInvite,
+                            pressed && { opacity: 0.75 },
+                          ]}
+                          testID="welcome-invite"
+                        >
+                          <Ionicons name="share-social" size={15} color={COLORS.primary} />
+                          <Text style={[styles.ctaText, { color: COLORS.primary }]}>הזמן חבר</Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={openWhatsApp}
+                          style={({ pressed }) => [
+                            styles.ctaChip,
+                            styles.ctaContact,
+                            pressed && { opacity: 0.85 },
+                          ]}
+                          testID="welcome-contact"
+                        >
+                          <Ionicons name="logo-whatsapp" size={15} color="#fff" />
+                          <Text style={[styles.ctaText, { color: "#fff" }]}>צור קשר</Text>
+                        </Pressable>
+                      </View>
                     )}
                   </View>
                 </View>
@@ -444,6 +464,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sugChip: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 4,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: RADIUS.pill,
