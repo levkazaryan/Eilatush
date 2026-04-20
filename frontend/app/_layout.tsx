@@ -2,9 +2,18 @@
 
 import { useEffect } from "react";
 import { Stack } from "expo-router";
-import { I18nManager, Platform } from "react-native";
+import { I18nManager, LogBox, Platform } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { COLORS } from "../theme";
+
+// Silence noisy dev-only warnings that overlay the UI in Expo Go
+LogBox.ignoreLogs([
+  "Cannot read properties of undefined (reading 'body')",
+  "expo-keep-awake",
+  "ExpoKeepAwake",
+  "new NativeEventEmitter",
+  "Require cycle:",
+]);
 
 // Force RTL on native; on web we toggle document.dir
 if (Platform.OS !== "web") {

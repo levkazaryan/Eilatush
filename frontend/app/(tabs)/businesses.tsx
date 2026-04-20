@@ -62,7 +62,7 @@ export default function BusinessesScreen() {
         category: category.length ? category : undefined,
         open_now: type === "business" ? openNow : undefined,
         q: debouncedQuery || undefined,
-        limit: 500,
+        limit: 2000,
       });
       setList(Array.isArray(data) ? data : []);
     } catch (e) {

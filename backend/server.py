@@ -805,12 +805,37 @@ async def on_startup():
         await db.businesses.delete_many({"fingerprint": {"$exists": False}})
     except Exception:
         pass
-    # start scheduler + kick off first scrape in background
+    # start scheduler + kick off first scrape in background.
+    # Skip startup-scrape for a collection if it already has sufficient data
+    # — this avoids saturating the event loop with LLM tagging on every
+    # container restart. The weekly scheduler will refresh anyway.
     _start_scheduler()
     import asyncio
-    asyncio.create_task(_run_scrape_job())
-    asyncio.create_task(_run_jobs_scrape())
-    asyncio.create_task(_run_businesses_scrape())
+
+    async def _maybe_run(count_fn, runner, min_count: int, label: str) -> None:
+        try:
+            c = await count_fn()
+        except Exception:
+            c = 0
+        if c >= min_count:
+            logger.info("startup skip %s scrape (have %d rows)", label, c)
+            return
+        await runner()
+
+    asyncio.create_task(
+        _maybe_run(lambda: db.news.count_documents({}), _run_scrape_job, 30, "news")
+    )
+    asyncio.create_task(
+        _maybe_run(lambda: db.jobs.count_documents({}), _run_jobs_scrape, 20, "jobs")
+    )
+    asyncio.create_task(
+        _maybe_run(
+            lambda: db.businesses.count_documents({}),
+            _run_businesses_scrape,
+            500,
+            "businesses",
+        )
+    )
 
 
 async def _run_scrape_job() -> int:
