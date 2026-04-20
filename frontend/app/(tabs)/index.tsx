@@ -17,20 +17,20 @@ import { EventCard, EventT, SectionHeader, FilterChip, EmptyState } from "../../
 import { WeatherHero } from "../../components/WeatherHero";
 
 const BANDS: { key: "all" | "now" | "tonight" | "later"; label: string }[] = [
-  { key: "later", label: "בהמשך" },
-  { key: "tonight", label: "הערב" },
-  { key: "now", label: "עכשיו" },
   { key: "all", label: "הכל" },
+  { key: "now", label: "עכשיו" },
+  { key: "tonight", label: "הערב" },
+  { key: "later", label: "בהמשך" },
 ];
 
 const CATEGORIES: { key: string; label: string }[] = [
-  { key: "sport", label: "ספורט" },
-  { key: "food", label: "אוכל" },
-  { key: "activity", label: "פעילות" },
-  { key: "show", label: "מופעים" },
-  { key: "concert", label: "הופעות" },
-  { key: "party", label: "מסיבות" },
   { key: "", label: "כל הסוגים" },
+  { key: "party", label: "מסיבות" },
+  { key: "concert", label: "הופעות" },
+  { key: "show", label: "מופעים" },
+  { key: "activity", label: "פעילות" },
+  { key: "food", label: "אוכל" },
+  { key: "sport", label: "ספורט" },
 ];
 
 export default function HomeScreen() {
@@ -237,10 +237,10 @@ const styles = StyleSheet.create({
   },
   chipsScrollContent: {
     paddingHorizontal: SPACING.md,
-    flexDirection: "row-reverse",
+    flexDirection: "row",
   },
   chipsFlex: {
-    flexDirection: "row-reverse",
+    flexDirection: "row",
     paddingHorizontal: SPACING.md,
     justifyContent: "flex-start",
     gap: 0,
