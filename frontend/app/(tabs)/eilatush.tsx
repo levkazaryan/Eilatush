@@ -13,6 +13,9 @@ import {
   ActivityIndicator,
   Image,
   Pressable,
+  Share,
+  Linking,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -42,6 +45,61 @@ const SUGGESTIONS = [
   "חדשות מהעירייה",
   "מסיבות הלילה",
 ];
+
+const CONTACT_PHONE = "972535319943"; // +972-53-531-9943
+const APP_URL =
+  (typeof process !== "undefined" && process.env?.EXPO_PUBLIC_APP_URL) ||
+  "https://eilat-connect.preview.emergentagent.com";
+const SHARE_MSG = `היי 👋
+גיליתי את אילתוש 🐠 - אפליקציה שמרכזת הכל על אילת:
+אירועים, עסקים, עבודה, חדשות ואיש קשר חכם שיודע הכל על העיר.
+שווה לבדוק:
+${APP_URL}`;
+
+async function openWhatsApp() {
+  const text = encodeURIComponent(
+    "היי, הגעתי מהאפליקציה אילתוש. אשמח לעזרה / פידבק 🙂",
+  );
+  const appUrl = `whatsapp://send?phone=${CONTACT_PHONE}&text=${text}`;
+  const webUrl = `https://wa.me/${CONTACT_PHONE}?text=${text}`;
+  try {
+    if (Platform.OS === "web") {
+      // On web, canOpenURL always returns true for any scheme, so skip it
+      // and go straight to the public wa.me URL which works in every browser.
+      await Linking.openURL(webUrl);
+      return;
+    }
+    const canApp = await Linking.canOpenURL(appUrl);
+    await Linking.openURL(canApp ? appUrl : webUrl);
+  } catch (e) {
+    try {
+      await Linking.openURL(webUrl);
+    } catch (err) {
+      Alert.alert("שגיאה", "לא הצלחנו לפתוח את WhatsApp. נסו שוב.");
+    }
+  }
+}
+
+async function inviteFriend() {
+  try {
+    if (Platform.OS === "web") {
+      // Web share API if available, fallback to clipboard copy
+      const nav: any = (globalThis as any).navigator;
+      if (nav?.share) {
+        await nav.share({ title: "אילתוש 🐠", text: SHARE_MSG, url: APP_URL });
+        return;
+      }
+      if (nav?.clipboard?.writeText) {
+        await nav.clipboard.writeText(SHARE_MSG);
+        Alert.alert("הקישור הועתק ✨", "הדביקו אותו איפה שתרצו ושלחו לחבר");
+        return;
+      }
+    }
+    await Share.share({ message: SHARE_MSG, url: APP_URL, title: "אילתוש 🐠" });
+  } catch (e) {
+    // user cancelled or platform refused — silent.
+  }
+}
 
 export default function EilatushScreen() {
   const [messages, setMessages] = useState<Msg[]>([
@@ -99,9 +157,34 @@ export default function EilatushScreen() {
             <View style={styles.mascot}>
               <Ionicons name="sparkles" size={20} color="#fff" />
             </View>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={styles.headerTitle}>אילתוש</Text>
               <Text style={styles.headerSub}>העוזר המקומי שלך · תמיד כאן</Text>
+            </View>
+            <View style={styles.headerActions}>
+              <Pressable
+                onPress={inviteFriend}
+                style={({ pressed }) => [
+                  styles.headerIconBtn,
+                  pressed && { opacity: 0.6 },
+                ]}
+                accessibilityLabel="הזמן חבר"
+                testID="header-invite"
+              >
+                <Ionicons name="share-social-outline" size={20} color={COLORS.primary} />
+              </Pressable>
+              <Pressable
+                onPress={openWhatsApp}
+                style={({ pressed }) => [
+                  styles.headerIconBtn,
+                  { backgroundColor: "#25D366" },
+                  pressed && { opacity: 0.7 },
+                ]}
+                accessibilityLabel="צור קשר בוואטסאפ"
+                testID="header-contact"
+              >
+                <Ionicons name="logo-whatsapp" size={20} color="#fff" />
+              </Pressable>
             </View>
           </View>
         </View>
@@ -140,18 +223,46 @@ export default function EilatushScreen() {
                       </View>
                     )}
                     {m.id === "welcome" && (
-                      <View style={styles.sugWrap}>
-                        {SUGGESTIONS.map((s) => (
+                      <>
+                        <View style={styles.sugWrap}>
+                          {SUGGESTIONS.map((s) => (
+                            <Pressable
+                              key={s}
+                              onPress={() => send(s)}
+                              style={({ pressed }) => [styles.sugChip, pressed && { opacity: 0.7 }]}
+                              testID={`suggestion-${s}`}
+                            >
+                              <Text style={styles.sugChipText}>{s}</Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                        <View style={styles.ctaRow}>
                           <Pressable
-                            key={s}
-                            onPress={() => send(s)}
-                            style={({ pressed }) => [styles.sugChip, pressed && { opacity: 0.7 }]}
-                            testID={`suggestion-${s}`}
+                            onPress={inviteFriend}
+                            style={({ pressed }) => [
+                              styles.ctaChip,
+                              styles.ctaInvite,
+                              pressed && { opacity: 0.75 },
+                            ]}
+                            testID="welcome-invite"
                           >
-                            <Text style={styles.sugChipText}>{s}</Text>
+                            <Ionicons name="share-social" size={15} color={COLORS.primary} />
+                            <Text style={[styles.ctaText, { color: COLORS.primary }]}>הזמן חבר</Text>
                           </Pressable>
-                        ))}
-                      </View>
+                          <Pressable
+                            onPress={openWhatsApp}
+                            style={({ pressed }) => [
+                              styles.ctaChip,
+                              styles.ctaContact,
+                              pressed && { opacity: 0.85 },
+                            ]}
+                            testID="welcome-contact"
+                          >
+                            <Ionicons name="logo-whatsapp" size={15} color="#fff" />
+                            <Text style={[styles.ctaText, { color: "#fff" }]}>צור קשר</Text>
+                          </Pressable>
+                        </View>
+                      </>
                     )}
                   </View>
                 </View>
@@ -268,6 +379,48 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   sugChipText: { color: COLORS.secondary, fontSize: 13, fontWeight: "700" },
+
+  headerActions: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 8,
+  },
+  headerIconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(20,184,179,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(20,184,179,0.30)",
+  },
+
+  ctaRow: {
+    flexDirection: "row-reverse",
+    gap: 10,
+    marginTop: 12,
+  },
+  ctaChip: {
+    flex: 1,
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: RADIUS.pill,
+    minHeight: 44,
+  },
+  ctaInvite: {
+    backgroundColor: "rgba(20,184,179,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(20,184,179,0.40)",
+  },
+  ctaContact: {
+    backgroundColor: "#25D366",
+  },
+  ctaText: { fontSize: 14, fontWeight: "800" },
 
   inputRow: {
     flexDirection: "row-reverse",
