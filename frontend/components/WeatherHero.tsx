@@ -22,6 +22,7 @@ import Animated, {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { COLORS, RADIUS, SPACING } from "../theme";
+import { shareApp, openContactWhatsApp } from "../api";
 
 // ---------------------------------------------------------------------------
 // Weather helpers
@@ -188,11 +189,14 @@ export function WeatherHero({
   subtitle,
   brand,
   rightSlot,
+  showActions = true,
 }: {
   title: string;
   subtitle?: string;
   brand?: React.ReactNode;
   rightSlot?: React.ReactNode;
+  /** Show the share + WhatsApp contact buttons in the header */
+  showActions?: boolean;
 }) {
   const [data, setData] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -299,6 +303,35 @@ export function WeatherHero({
           </>
         ) : null}
       </Pressable>
+
+      {/* Action buttons – top left: share + WhatsApp contact */}
+      {showActions ? (
+        <View style={styles.headerActions}>
+          <Pressable
+            onPress={shareApp}
+            style={({ pressed }) => [
+              styles.headerIconBtn,
+              pressed && { opacity: 0.7 },
+            ]}
+            accessibilityLabel="הזמן חבר"
+            testID="hero-invite"
+          >
+            <Ionicons name="share-social-outline" size={20} color="#fff" />
+          </Pressable>
+          <Pressable
+            onPress={openContactWhatsApp}
+            style={({ pressed }) => [
+              styles.headerIconBtn,
+              { backgroundColor: "#25D366", borderColor: "rgba(255,255,255,0.6)" },
+              pressed && { opacity: 0.8 },
+            ]}
+            accessibilityLabel="צור קשר בוואטסאפ"
+            testID="hero-contact"
+          >
+            <Ionicons name="logo-whatsapp" size={20} color="#fff" />
+          </Pressable>
+        </View>
+      ) : null}
 
       {/* 7-day modal */}
       <Modal
@@ -421,6 +454,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     opacity: 0.9,
     maxWidth: 80,
+  },
+
+  headerActions: {
+    position: "absolute",
+    top: SPACING.md,
+    left: SPACING.md,
+    flexDirection: "row",
+    gap: 8,
+    zIndex: 5,
+  },
+  headerIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.22)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.45)",
   },
 
   // orb

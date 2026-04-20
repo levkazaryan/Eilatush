@@ -193,6 +193,61 @@ export const openLink = (url?: string) => {
   });
 };
 
+// ---------------------------------------------------------------------------
+// App-wide share + contact helpers
+// ---------------------------------------------------------------------------
+export const CONTACT_PHONE = "972535319943";
+export const APP_URL =
+  (typeof process !== "undefined" && process.env?.EXPO_PUBLIC_APP_URL) ||
+  "https://eilat-connect.preview.emergentagent.com";
+export const SHARE_MSG = `היי 👋
+גיליתי את אילתוש 🐠 - אפליקציה שמרכזת הכל על אילת:
+אירועים, עסקים, עבודה, חדשות ואיש קשר חכם שיודע הכל על העיר.
+שווה לבדוק:
+${APP_URL}`;
+
+export async function openContactWhatsApp() {
+  const text = encodeURIComponent(
+    "היי, הגעתי מהאפליקציה אילתוש. אשמח לעזרה / פידבק 🙂",
+  );
+  const appUrl = `whatsapp://send?phone=${CONTACT_PHONE}&text=${text}`;
+  const webUrl = `https://wa.me/${CONTACT_PHONE}?text=${text}`;
+  try {
+    if (Platform.OS === "web") {
+      await Linking.openURL(webUrl);
+      return;
+    }
+    const canApp = await Linking.canOpenURL(appUrl);
+    await Linking.openURL(canApp ? appUrl : webUrl);
+  } catch {
+    try {
+      await Linking.openURL(webUrl);
+    } catch {
+      /* silent */
+    }
+  }
+}
+
+export async function shareApp() {
+  try {
+    if (Platform.OS === "web") {
+      const nav: any = (globalThis as any).navigator;
+      if (nav?.share) {
+        await nav.share({ title: "אילתוש 🐠", text: SHARE_MSG, url: APP_URL });
+        return;
+      }
+      if (nav?.clipboard?.writeText) {
+        await nav.clipboard.writeText(SHARE_MSG);
+        return;
+      }
+    }
+    const { Share } = await import("react-native");
+    await Share.share({ message: SHARE_MSG, url: APP_URL, title: "אילתוש 🐠" });
+  } catch {
+    /* user cancelled — silent */
+  }
+}
+
 export const formatHebrewTime = (iso?: string | null): string => {
   if (!iso) return "";
   // Backend stores UTC. If the ISO string lacks a timezone suffix, append "Z"
