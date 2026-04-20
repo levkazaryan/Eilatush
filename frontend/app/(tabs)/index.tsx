@@ -8,13 +8,13 @@ import {
   ScrollView,
   RefreshControl,
   ActivityIndicator,
-  ImageBackground,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../api";
 import { COLORS, RADIUS, SPACING } from "../../theme";
 import { EventCard, EventT, SectionHeader, FilterChip, EmptyState } from "../../components";
+import { WeatherHero } from "../../components/WeatherHero";
 
 const BANDS: { key: "all" | "now" | "tonight" | "later"; label: string }[] = [
   { key: "all", label: "הכל" },
@@ -89,27 +89,22 @@ export default function HomeScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />
         }
       >
-        <ImageBackground
-          source={{ uri: "https://images.unsplash.com/photo-1578626574897-2e9c35e1ea29?crop=entropy&cs=srgb&fm=jpg&w=1200" }}
-          style={styles.hero}
-          imageStyle={{ opacity: 0.45 }}
-        >
-          <View style={styles.heroOverlay} />
-          <View style={styles.heroContent}>
+        <WeatherHero
+          title="מה קורה עכשיו באילת?"
+          subtitle={
+            nowCount > 0
+              ? `${nowCount} אירועים קורים ממש עכשיו · גלול למטה`
+              : "מסיבות, הופעות, פעילויות - הכל במקום אחד"
+          }
+          brand={
             <View style={styles.brandRow}>
               <View style={styles.brandDot}>
                 <Ionicons name="sparkles" size={16} color="#fff" />
               </View>
               <Text style={styles.brandText}>אילתוש</Text>
             </View>
-            <Text style={styles.heroTitle}>מה קורה עכשיו באילת?</Text>
-            <Text style={styles.heroSub}>
-              {nowCount > 0
-                ? `${nowCount} אירועים קורים ממש עכשיו · גלול למטה`
-                : "מסיבות, הופעות, פעילויות - הכל במקום אחד"}
-            </Text>
-          </View>
-        </ImageBackground>
+          }
+        />
 
         <View style={styles.chipsRow}>
           <ScrollView
