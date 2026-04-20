@@ -50,8 +50,8 @@ const DEFAULT_FOLLOWUPS = [
   "מסיבות הלילה",
 ];
 
-const STORAGE_KEY = "eilatush_chat_v2";
-const SESSION_KEY = "eilatush_session_v2";
+const STORAGE_KEY = "eilatush_chat_v3";
+const SESSION_KEY = "eilatush_session_v3";
 const MAX_HISTORY = 40; // keep last N messages in storage
 
 const CONTACT_PHONE = "972535319943"; // +972-53-531-9943
@@ -59,8 +59,8 @@ const APP_URL =
   (typeof process !== "undefined" && process.env?.EXPO_PUBLIC_APP_URL) ||
   "https://eilat-connect.preview.emergentagent.com";
 const SHARE_MSG = `היי 👋
-גיליתי את אילתוש 🐠 - אפליקציה שמרכזת הכל על אילת:
-אירועים, עסקים, עבודה, חדשות ואיש קשר חכם שיודע הכל על העיר.
+גיליתי את אילתוש 🌴 - אפליקציה שמרכזת הכל על אילת:
+אירועים, עסקים, עבודה, חדשות ועוזרת חכמה שיודעת הכל על העיר.
 שווה לבדוק:
 ${APP_URL}`;
 
@@ -237,7 +237,7 @@ export default function EilatushScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.headerTitle}>אילתוש</Text>
-              <Text style={styles.headerSub}>העוזר המקומי שלך · תמיד כאן</Text>
+              <Text style={styles.headerSub}>העוזרת המקומית שלך · תמיד כאן</Text>
             </View>
             <View style={styles.headerActions}>
               <Pressable
