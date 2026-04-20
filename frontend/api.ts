@@ -118,11 +118,15 @@ export const api = {
     const r = await fetch(`${API}/api/news/status`);
     return r.json();
   },
-  async chat(message: string, session_id?: string) {
+  async chat(
+    message: string,
+    session_id?: string,
+    history?: { role: string; text: string }[],
+  ) {
     const r = await fetch(`${API}/api/eilatush/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, session_id }),
+      body: JSON.stringify({ message, session_id, history }),
     });
     return r.json();
   },

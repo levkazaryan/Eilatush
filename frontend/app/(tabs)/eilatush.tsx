@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api } from "../../api";
 import { COLORS, RADIUS, SPACING } from "../../theme";
 import { EventCard, BusinessCard, JobCard, NewsCard } from "../../components";
@@ -35,9 +36,10 @@ type Msg = {
   text: string;
   results?: ResultItem[];
   intent?: string;
+  followUps?: string[];
 };
 
-const SUGGESTIONS = [
+const DEFAULT_FOLLOWUPS = [
   "מה קורה הערב?",
   "ברים פתוחים עכשיו",
   "עבודה דחופה",
@@ -45,6 +47,10 @@ const SUGGESTIONS = [
   "חדשות מהעירייה",
   "מסיבות הלילה",
 ];
+
+const STORAGE_KEY = "eilatush_chat_v2";
+const SESSION_KEY = "eilatush_session_v2";
+const MAX_HISTORY = 40; // keep last N messages in storage
 
 const CONTACT_PHONE = "972535319943"; // +972-53-531-9943
 const APP_URL =
@@ -107,23 +113,87 @@ export default function EilatushScreen() {
       id: "welcome",
       role: "bot",
       text: "היי! אני אילתוש 🐠 \nשאל אותי מה קורה בעיר, איפה לאכול, איפה לעבוד או מה חדש. אני חוזר עם הכל בתוך שניות.",
+      followUps: DEFAULT_FOLLOWUPS.slice(0, 3),
     },
   ]);
   const [input, setInput] = useState("");
   const [sessionId, setSessionId] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+
+  // ---- persistence ----
+  useEffect(() => {
+    (async () => {
+      try {
+        const [rawMsgs, rawSess] = await Promise.all([
+          AsyncStorage.getItem(STORAGE_KEY),
+          AsyncStorage.getItem(SESSION_KEY),
+        ]);
+        if (rawMsgs) {
+          const saved = JSON.parse(rawMsgs);
+          if (Array.isArray(saved) && saved.length > 0) {
+            setMessages(saved);
+          }
+        }
+        if (rawSess) setSessionId(rawSess);
+      } catch (e) {
+        console.warn("chat load failed", e);
+      } finally {
+        setHydrated(true);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const trimmed = messages.slice(-MAX_HISTORY);
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed)).catch(() => {});
+  }, [messages, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated || !sessionId) return;
+    AsyncStorage.setItem(SESSION_KEY, sessionId).catch(() => {});
+  }, [sessionId, hydrated]);
+
+  const clearChat = async () => {
+    const doClear = () => {
+      setMessages([
+        {
+          id: "welcome",
+          role: "bot",
+          text: "שיחה חדשה! 🐠 על מה נתחיל?",
+          followUps: DEFAULT_FOLLOWUPS.slice(0, 3),
+        },
+      ]);
+      setSessionId(undefined);
+      AsyncStorage.multiRemove([STORAGE_KEY, SESSION_KEY]).catch(() => {});
+    };
+    if (Platform.OS === "web") {
+      doClear();
+      return;
+    }
+    Alert.alert("שיחה חדשה", "לנקות את ההיסטוריה ולהתחיל שיחה חדשה?", [
+      { text: "ביטול", style: "cancel" },
+      { text: "נקה", style: "destructive", onPress: doClear },
+    ]);
+  };
 
   const send = async (msg?: string) => {
     const text = (msg ?? input).trim();
     if (!text || loading) return;
     setInput("");
     const userMsg: Msg = { id: `u-${Date.now()}`, role: "user", text };
+    // Build history from visible (non-welcome) messages
+    const history = messages
+      .filter((m) => m.id !== "welcome")
+      .slice(-8)
+      .map((m) => ({ role: m.role === "user" ? "user" : "assistant", text: m.text }));
     setMessages((m) => [...m, userMsg]);
     setLoading(true);
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
     try {
-      const res = await api.chat(text, sessionId);
+      const res = await api.chat(text, sessionId, history);
       if (res.session_id) setSessionId(res.session_id);
       const botMsg: Msg = {
         id: `b-${Date.now()}`,
@@ -131,6 +201,9 @@ export default function EilatushScreen() {
         text: res.reply || "הנה מה שמצאתי 🐠",
         results: res.results || [],
         intent: res.intent,
+        followUps: Array.isArray(res.follow_ups) && res.follow_ups.length
+          ? res.follow_ups
+          : undefined,
       };
       setMessages((m) => [...m, botMsg]);
     } catch (e) {

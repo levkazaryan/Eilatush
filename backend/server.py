@@ -84,9 +84,15 @@ class News(BaseModel):
     published_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     link: Optional[str] = None
 
+class ChatHistoryItem(BaseModel):
+    role: str  # "user" | "assistant"
+    text: str
+
+
 class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
+    history: Optional[List[ChatHistoryItem]] = None
 
 # ------------------- HELPERS -------------------
 
@@ -661,10 +667,142 @@ async def _llm_classify(message: str, session_id: str) -> Dict[str, Any]:
             "filters": filters,
         }
 
+# Personality: warm, local Eilati friend. Short, friendly, uses emoji sparingly.
+EILATUSH_REPLY_PROMPT = """\
+אתה אילתוש - חבר אישי מקומי לתושבי אילת. מדבר בעברית טבעית, קצרה, חמה, ועם הומור מקומי ("יא אילתושי", "חחח", "סבבה").
+תפקידך: לענות בצורה ישירה, לא למכור, לא להיות רובוטי. יש לך גישה לתוצאות אמיתיות ממסד הנתונים שלנו (אירועים, עסקים, חדשות, עבודות).
+
+חוקים:
+1. תשובה של 1-3 משפטים בלבד. אל תפרט רשימות - המשתמש יראה את הכרטיסיות בעצמו.
+2. אם אין תוצאות - תגיד ישירות בלי תירוצים, והציע כיוון חלופי.
+3. התייחס לפרט אחד מהתוצאות אם זה עוזר ("זה ב-Sunset נשמע שווה" / "הכי רלוונטי זה..."). לא יותר.
+4. אל תגיד "מצאתי X תוצאות" - המשתמש רואה את זה.
+5. אם המשתמש שאל משהו כללי (לא חיפוש) - תענה כמו חבר שיודע את אילת. קצר.
+6. מזג אוויר - אם המשתמש שאל - השתמש במידע שצורף ({weather_ctx}). אם לא - התעלם.
+7. תמיד הצע 3 שאלות המשך קצרות ורלוונטיות - פועל + מקום/סוג.
+
+מזג אוויר עכשיו באילת: {weather_ctx}
+שאלת המשתמש: "{user_msg}"
+כוונה שזוהתה: {intent}
+סיכום תוצאות שנמצאו (אל תצטט הכל, רק התייחס):
+{results_summary}
+
+החזר JSON תקין ובלבד, ללא markdown:
+{{
+  "reply": "תשובה טבעית של 1-3 משפטים",
+  "follow_ups": ["שאלה 1", "שאלה 2", "שאלה 3"]
+}}"""
+
+
+async def _fetch_weather_brief() -> str:
+    try:
+        import httpx as _h
+        async with _h.AsyncClient(timeout=6) as c:
+            r = await c.get(
+                "https://api.open-meteo.com/v1/forecast",
+                params={
+                    "latitude": 29.5577,
+                    "longitude": 34.9519,
+                    "current": "temperature_2m,weather_code,is_day",
+                    "timezone": "auto",
+                },
+            )
+            j = r.json()
+            cur = j.get("current", {})
+            t = cur.get("temperature_2m")
+            code = cur.get("weather_code", 0)
+            is_day = cur.get("is_day", 1)
+            label = (
+                "בהיר" if code == 0 else
+                "מעונן חלקית" if code <= 2 else
+                "מעונן" if code == 3 else
+                "גשום" if code >= 51 and code <= 67 else
+                "סופה" if code >= 95 else
+                "לא ידוע"
+            )
+            tod = "יום" if is_day else "לילה"
+            return f"{round(t) if t is not None else '?'}° · {label} · {tod}"
+    except Exception:
+        return "לא זמין"
+
+
+def _summarize_results(intent: str, results: List[Dict[str, Any]]) -> str:
+    if not results:
+        return "אין תוצאות."
+    lines = []
+    for r in results[:5]:
+        it = r.get("item", {}) or {}
+        if intent == "events":
+            lines.append(f"- {it.get('title','?')} · {it.get('venue','')}"[:120])
+        elif intent == "businesses":
+            lines.append(f"- {it.get('name','?')} · {it.get('category','')} · {it.get('address','')}"[:120])
+        elif intent == "jobs":
+            lines.append(f"- {it.get('title','?')} · {it.get('company','')}"[:120])
+        elif intent == "news":
+            lines.append(f"- {it.get('title','?')} · {it.get('source','')}"[:120])
+    return "\n".join(lines) if lines else "אין תוצאות."
+
+
+async def _generate_reply(
+    user_msg: str,
+    intent: str,
+    results: List[Dict[str, Any]],
+    session_id: str,
+    weather: str,
+) -> Dict[str, Any]:
+    """Run a second LLM pass to craft a conversational reply + follow-ups."""
+    prompt = EILATUSH_REPLY_PROMPT.format(
+        user_msg=user_msg,
+        intent=intent,
+        weather_ctx=weather,
+        results_summary=_summarize_results(intent, results),
+    )
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"{session_id}_reply",
+            system_message="אתה אילתוש - חבר מקומי לתושבי אילת. קצר, חם, עברי.",
+        ).with_model("anthropic", "claude-sonnet-4-5-20250929")
+        resp = await chat.send_message(UserMessage(text=prompt))
+        text = resp.strip()
+        if text.startswith("```"):
+            text = text.strip("`")
+            if text.startswith("json"):
+                text = text[4:].strip()
+        parsed = json.loads(text)
+        reply = parsed.get("reply") or "הנה מה שמצאתי 🐠"
+        follow_ups = [
+            s.strip() for s in (parsed.get("follow_ups") or []) if isinstance(s, str)
+        ][:3]
+        return {"reply": reply, "follow_ups": follow_ups}
+    except Exception as e:
+        logger.warning("reply gen failed, using fallback: %s", e)
+        return {
+            "reply": (
+                "מצאתי כמה דברים רלוונטיים למטה 👇" if results
+                else "לא מצאתי כרגע. תנסה אחרת? 🐠"
+            ),
+            "follow_ups": _default_followups(intent),
+        }
+
+
+def _default_followups(intent: str) -> List[str]:
+    mapping = {
+        "events": ["מה קורה מחר?", "יש הופעה בשבת?", "מסיבת חוף הלילה?"],
+        "businesses": ["פאב פתוח עכשיו?", "סושי זול?", "ספא טוב?"],
+        "jobs": ["עבודה דחופה בערב?", "משרות במלון?", "עבודה לסטודנט?"],
+        "news": ["מה חדש בעירייה?", "פתיחות חדשות?", "מבצעים השבוע?"],
+        "general": ["מה קורה הערב?", "איפה טוב לאכול?", "עבודה דחופה?"],
+    }
+    return mapping.get(intent, mapping["general"])
+
+
 @api_router.post("/eilatush/chat")
 async def eilatush_chat(body: ChatRequest):
     session_id = body.session_id or str(uuid.uuid4())
-    parsed = await _llm_classify(body.message, session_id)
+    user_msg = body.message
+    parsed = await _llm_classify(user_msg, session_id)
     intent = parsed.get("intent", "general")
     filters = parsed.get("filters") or {}
     results: List[Dict[str, Any]] = []
@@ -680,7 +818,7 @@ async def eilatush_chat(body: ChatRequest):
             docs = [d for d in docs if d["band"] == filters["time"]]
         kws = filters.get("keywords") or []
         if kws:
-            docs = [d for d in docs if any(kw in (d["title"] + d["description"]) for kw in kws)]
+            docs = [d for d in docs if any(kw in (d.get("title","") + (d.get("description") or "")) for kw in kws)]
         docs.sort(key=lambda d: d["starts_at"])
         results = [{"type": "event", "item": d} for d in docs[:10]]
 
@@ -695,7 +833,10 @@ async def eilatush_chat(body: ChatRequest):
             docs = [d for d in docs if d["open_now"]]
         kws = filters.get("keywords") or []
         if kws:
-            docs = [d for d in docs if any(kw in (d["name"] + d["description"] + " ".join(d.get("tags", []))) for kw in kws)]
+            docs = [d for d in docs if any(
+                kw in (d.get("name","") + (d.get("description") or "") + " ".join(d.get("tags") or []))
+                for kw in kws
+            )]
         results = [{"type": "business", "item": d} for d in docs[:10]]
 
     elif intent == "jobs":
@@ -712,11 +853,17 @@ async def eilatush_chat(body: ChatRequest):
         docs.sort(key=lambda d: d["published_at"], reverse=True)
         results = [{"type": "news", "item": d} for d in docs[:10]]
 
+    # -- 2nd LLM pass for conversational reply + follow-ups --
+    weather = await _fetch_weather_brief()
+    gen = await _generate_reply(user_msg, intent, results, session_id, weather)
+
     return {
         "session_id": session_id,
-        "reply": parsed.get("reply") or "הנה מה שמצאתי 🐠",
+        "reply": gen["reply"],
         "intent": intent,
         "results": results,
+        "follow_ups": gen["follow_ups"] or _default_followups(intent),
+        "weather": weather,
     }
 
 # ------------------- SEED -------------------
