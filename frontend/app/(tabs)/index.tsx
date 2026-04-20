@@ -106,14 +106,6 @@ export default function HomeScreen() {
               ? `${nowCount} אירועים קורים ממש עכשיו · גלול למטה`
               : "מסיבות, הופעות, פעילויות - הכל במקום אחד"
           }
-          brand={
-            <View style={styles.brandRow}>
-              <View style={styles.brandDot}>
-                <Ionicons name="sparkles" size={16} color="#fff" />
-              </View>
-              <Text style={styles.brandText}>אילתוש</Text>
-            </View>
-          }
         />
 
         <View style={styles.chipsRow}>
