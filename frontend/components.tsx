@@ -1,22 +1,45 @@
 import React from "react";
-import { View, Text, StyleSheet, Image, TouchableOpacity, Pressable } from "react-native";
+import { View, Text, StyleSheet, Image, TouchableOpacity, Pressable, Linking } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS, RADIUS, SPACING } from "./theme";
-import { openWhatsApp, openPhone, formatHebrewTime, formatJobPosted } from "./api";
+import { openWhatsApp, openPhone, openLink, formatHebrewTime, formatJobPosted } from "./api";
 
 export type EventT = {
   id: string;
   title: string;
-  description: string;
-  category: string;
-  venue: string;
-  image: string;
+  description?: string | null;
+  category?: string | null;
+  venue?: string | null;
+  image?: string | null;
   starts_at: string;
   price?: string;
   whatsapp?: string;
   phone?: string;
+  link?: string | null;
+  source?: string | null;
+  tags?: string[];
   band?: "now" | "tonight" | "later";
 };
+
+/** Visual mapping for event categories / tags when no photo is available. */
+const EVENT_VISUAL: Record<
+  string,
+  { icon: keyof typeof Ionicons.glyphMap; color: string; bg: string }
+> = {
+  cinema:     { icon: "film",          color: "#7C3AED", bg: "#EDE9FE" },
+  concert:    { icon: "musical-notes", color: "#DB2777", bg: "#FCE7F3" },
+  party:      { icon: "wine",          color: "#F97316", bg: "#FFEDD5" },
+  show:       { icon: "mic",           color: "#0EA5E9", bg: "#E0F2FE" },
+  sport:      { icon: "basketball",    color: "#16A34A", bg: "#DCFCE7" },
+  food:       { icon: "restaurant",    color: "#EA580C", bg: "#FFEDD5" },
+  activity:   { icon: "sparkles",      color: "#14B8B3", bg: "#CCFBF1" },
+  kids:       { icon: "balloon",       color: "#F472B6", bg: "#FCE7F3" },
+  default:    { icon: "calendar",      color: "#14B8B3", bg: "#CCFBF1" },
+};
+function eventVisual(item: EventT) {
+  const key = (item.tags?.[0] || item.category || "default").toLowerCase();
+  return EVENT_VISUAL[key] || EVENT_VISUAL.default;
+}
 
 export type BusinessT = {
   id: string;
@@ -123,13 +146,39 @@ export function TimeBandBadge({ band }: { band?: string }) {
 }
 
 export function EventCard({ item }: { item: EventT }) {
+  const vis = eventVisual(item);
+  const hasImage = !!item.image;
+  const hasVenue = !!(item.venue && String(item.venue).trim().length);
+  const hasDesc = !!(item.description && String(item.description).trim().length);
+  const canOpen = !!item.link;
+  const handleOpen = () => {
+    if (item.link) openLink(item.link);
+  };
   return (
-    <View style={styles.eventCard} testID={`event-card-${item.id}`}>
-      <Image source={{ uri: item.image }} style={styles.eventImage} />
-      <View style={styles.eventImageOverlay} />
+    <Pressable
+      onPress={handleOpen}
+      disabled={!canOpen}
+      style={({ pressed }) => [
+        styles.eventCard,
+        pressed && canOpen && { opacity: 0.85, transform: [{ scale: 0.995 }] },
+      ]}
+      testID={`event-card-${item.id}`}
+    >
+      {hasImage ? (
+        <>
+          <Image source={{ uri: item.image! }} style={styles.eventImage} />
+          <View style={styles.eventImageOverlay} />
+        </>
+      ) : (
+        <View style={[styles.eventImage, styles.eventImagePlaceholder, { backgroundColor: vis.bg }]}>
+          <Ionicons name={vis.icon} size={72} color={vis.color} />
+        </View>
+      )}
       <View style={styles.eventTopRow}>
         <TimeBandBadge band={item.band} />
-        <Text style={styles.categoryPill}>{categoryLabel[item.category] || item.category}</Text>
+        {item.category ? (
+          <Text style={styles.categoryPill}>{categoryLabel[item.category] || item.category}</Text>
+        ) : null}
       </View>
       <View style={styles.eventBody}>
         <Text style={styles.eventTitle} numberOfLines={2}>
@@ -138,15 +187,21 @@ export function EventCard({ item }: { item: EventT }) {
         <View style={styles.metaRow}>
           <Ionicons name="time-outline" size={14} color={COLORS.textSecondary} />
           <Text style={styles.metaText}>{formatHebrewTime(item.starts_at)}</Text>
-          <Text style={styles.metaDot}>·</Text>
-          <Ionicons name="location-outline" size={14} color={COLORS.textSecondary} />
-          <Text style={styles.metaText} numberOfLines={1}>
-            {item.venue}
-          </Text>
+          {hasVenue ? (
+            <>
+              <Text style={styles.metaDot}>·</Text>
+              <Ionicons name="location-outline" size={14} color={COLORS.textSecondary} />
+              <Text style={styles.metaText} numberOfLines={1}>
+                {item.venue}
+              </Text>
+            </>
+          ) : null}
         </View>
-        <Text style={styles.eventDesc} numberOfLines={2}>
-          {item.description}
-        </Text>
+        {hasDesc ? (
+          <Text style={styles.eventDesc} numberOfLines={2}>
+            {item.description}
+          </Text>
+        ) : null}
         <View style={styles.actionsRow}>
           {item.price && (
             <View style={styles.pricePill}>
@@ -154,10 +209,19 @@ export function EventCard({ item }: { item: EventT }) {
             </View>
           )}
           <View style={{ flex: 1 }} />
+          {canOpen ? (
+            <View style={styles.linkPill}>
+              <Ionicons name="open-outline" size={13} color={COLORS.primary} />
+              <Text style={styles.linkPillText}>לפרטים</Text>
+            </View>
+          ) : null}
           {item.phone && (
             <TouchableOpacity
               style={styles.iconBtn}
-              onPress={() => openPhone(item.phone)}
+              onPress={(e: any) => {
+                e.stopPropagation?.();
+                openPhone(item.phone);
+              }}
               testID={`event-call-${item.id}`}
             >
               <Ionicons name="call" size={16} color="#fff" />
@@ -166,7 +230,10 @@ export function EventCard({ item }: { item: EventT }) {
           {item.whatsapp && (
             <TouchableOpacity
               style={[styles.iconBtn, { backgroundColor: COLORS.whatsapp }]}
-              onPress={() => openWhatsApp(item.whatsapp, `היי, אני מהאפליקציה אילתוש ומתעניין ב־${item.title}`)}
+              onPress={(e: any) => {
+                e.stopPropagation?.();
+                openWhatsApp(item.whatsapp, `היי, אני מהאפליקציה אילתוש ומתעניין ב־${item.title}`);
+              }}
               testID={`event-whatsapp-${item.id}`}
             >
               <Ionicons name="logo-whatsapp" size={16} color="#fff" />
@@ -174,7 +241,7 @@ export function EventCard({ item }: { item: EventT }) {
           )}
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -583,6 +650,10 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   eventImage: { width: "100%", height: 140 },
+  eventImagePlaceholder: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
   eventImageOverlay: {
     position: "absolute",
     top: 0,
@@ -638,6 +709,18 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   pricePillText: { color: COLORS.textPrimary, fontSize: 12, fontWeight: "700" },
+  linkPill: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: RADIUS.pill,
+    backgroundColor: "rgba(20,184,179,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(20,184,179,0.35)",
+  },
+  linkPillText: { color: COLORS.primary, fontSize: 12, fontWeight: "800" },
   iconBtn: {
     width: 38,
     height: 38,
