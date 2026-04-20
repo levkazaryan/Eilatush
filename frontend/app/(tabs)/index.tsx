@@ -17,20 +17,20 @@ import { EventCard, EventT, SectionHeader, FilterChip, EmptyState } from "../../
 import { WeatherHero } from "../../components/WeatherHero";
 
 const BANDS: { key: "all" | "now" | "tonight" | "later"; label: string }[] = [
-  { key: "all", label: "הכל" },
-  { key: "now", label: "עכשיו" },
-  { key: "tonight", label: "הערב" },
   { key: "later", label: "בהמשך" },
+  { key: "tonight", label: "הערב" },
+  { key: "now", label: "עכשיו" },
+  { key: "all", label: "הכל" },
 ];
 
 const CATEGORIES: { key: string; label: string }[] = [
-  { key: "", label: "כל הסוגים" },
-  { key: "party", label: "מסיבות" },
-  { key: "concert", label: "הופעות" },
-  { key: "show", label: "מופעים" },
-  { key: "activity", label: "פעילות" },
-  { key: "food", label: "אוכל" },
   { key: "sport", label: "ספורט" },
+  { key: "food", label: "אוכל" },
+  { key: "activity", label: "פעילות" },
+  { key: "show", label: "מופעים" },
+  { key: "concert", label: "הופעות" },
+  { key: "party", label: "מסיבות" },
+  { key: "", label: "כל הסוגים" },
 ];
 
 export default function HomeScreen() {
@@ -107,11 +107,7 @@ export default function HomeScreen() {
         />
 
         <View style={styles.chipsRow}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: SPACING.md, flexDirection: "row-reverse" }}
-          >
+          <View style={styles.chipsFlex}>
             {BANDS.map((b) => (
               <FilterChip
                 key={b.key}
@@ -121,14 +117,14 @@ export default function HomeScreen() {
                 testID={`band-chip-${b.key}`}
               />
             ))}
-          </ScrollView>
+          </View>
         </View>
 
         <View style={[styles.chipsRow, { marginTop: 4 }]}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: SPACING.md, flexDirection: "row-reverse" }}
+            contentContainerStyle={styles.chipsScrollContent}
           >
             {CATEGORIES.map((c) => (
               <FilterChip
@@ -238,5 +234,15 @@ const styles = StyleSheet.create({
   chipsRow: {
     paddingTop: SPACING.md,
     paddingBottom: 4,
+  },
+  chipsScrollContent: {
+    paddingHorizontal: SPACING.md,
+    flexDirection: "row-reverse",
+  },
+  chipsFlex: {
+    flexDirection: "row-reverse",
+    paddingHorizontal: SPACING.md,
+    justifyContent: "flex-start",
+    gap: 0,
   },
 });
