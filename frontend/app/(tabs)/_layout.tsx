@@ -119,7 +119,10 @@ const styles = StyleSheet.create({
     minWidth: 80,   // ensure label never wraps regardless of parent width
   },
   centerLabel: {
-    marginTop: 2,
+    // Pull the label up closer to the mascot — the mascot image has
+    // significant transparent padding at the bottom, so we negate it here
+    // instead of cropping the asset.
+    marginTop: -12,
     paddingHorizontal: 4,
     includeFontPadding: false as any,
   },
