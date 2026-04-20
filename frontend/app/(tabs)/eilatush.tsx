@@ -24,6 +24,8 @@ import { api } from "../../api";
 import { COLORS, RADIUS, SPACING } from "../../theme";
 import { EventCard, BusinessCard, JobCard, NewsCard } from "../../components";
 
+const MASCOT_IMG = require("../../assets/images/eilatush-mascot.png");
+
 type ResultItem =
   | { type: "event"; item: any }
   | { type: "business"; item: any }
@@ -112,7 +114,7 @@ export default function EilatushScreen() {
     {
       id: "welcome",
       role: "bot",
-      text: "היי! אני אילתוש 🐠 \nשאל אותי מה קורה בעיר, איפה לאכול, איפה לעבוד או מה חדש. אני חוזר עם הכל בתוך שניות.",
+      text: "היי! אני אילתוש 🌴\nאני כאן כדי לעזור לך לגלות מה קורה בעיר - אירועים, מקומות לאכול, עבודה, חדשות. שאל/י אותי כל דבר ואני אחזור עם הכל בתוך שניות.",
       followUps: DEFAULT_FOLLOWUPS.slice(0, 3),
     },
   ]);
@@ -162,7 +164,7 @@ export default function EilatushScreen() {
         {
           id: "welcome",
           role: "bot",
-          text: "שיחה חדשה! 🐠 על מה נתחיל?",
+          text: "שיחה חדשה! על מה נתחיל?",
           followUps: DEFAULT_FOLLOWUPS.slice(0, 3),
         },
       ]);
@@ -201,7 +203,7 @@ export default function EilatushScreen() {
       const botMsg: Msg = {
         id: `b-${Date.now()}`,
         role: "bot",
-        text: res.reply || "הנה מה שמצאתי 🐠",
+        text: res.reply || "הנה מה שמצאתי",
         results: res.results || [],
         intent: res.intent,
         followUps: Array.isArray(res.follow_ups) && res.follow_ups.length
@@ -231,7 +233,7 @@ export default function EilatushScreen() {
         <View style={styles.header}>
           <View style={styles.brandRow}>
             <View style={styles.mascot}>
-              <Ionicons name="sparkles" size={20} color="#fff" />
+              <Image source={MASCOT_IMG} style={styles.mascotImg} resizeMode="contain" />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.headerTitle}>אילתוש</Text>
@@ -291,7 +293,7 @@ export default function EilatushScreen() {
               ) : (
                 <View style={styles.botWrap}>
                   <View style={styles.mascotSmall}>
-                    <Ionicons name="sparkles" size={14} color="#fff" />
+                    <Image source={MASCOT_IMG} style={styles.mascotSmallImg} resizeMode="contain" />
                   </View>
                   <View style={{ flex: 1 }}>
                     <View style={styles.botBubble}>
@@ -329,34 +331,6 @@ export default function EilatushScreen() {
                         ))}
                       </View>
                     )}
-                    {m.id === "welcome" && (
-                      <View style={styles.ctaRow}>
-                        <Pressable
-                          onPress={inviteFriend}
-                          style={({ pressed }) => [
-                            styles.ctaChip,
-                            styles.ctaInvite,
-                            pressed && { opacity: 0.75 },
-                          ]}
-                          testID="welcome-invite"
-                        >
-                          <Ionicons name="share-social" size={15} color={COLORS.primary} />
-                          <Text style={[styles.ctaText, { color: COLORS.primary }]}>הזמן חבר</Text>
-                        </Pressable>
-                        <Pressable
-                          onPress={openWhatsApp}
-                          style={({ pressed }) => [
-                            styles.ctaChip,
-                            styles.ctaContact,
-                            pressed && { opacity: 0.85 },
-                          ]}
-                          testID="welcome-contact"
-                        >
-                          <Ionicons name="logo-whatsapp" size={15} color="#fff" />
-                          <Text style={[styles.ctaText, { color: "#fff" }]}>צור קשר</Text>
-                        </Pressable>
-                      </View>
-                    )}
                   </View>
                 </View>
               )}
@@ -365,7 +339,7 @@ export default function EilatushScreen() {
           {loading && (
             <View style={styles.botWrap}>
               <View style={styles.mascotSmall}>
-                <Ionicons name="sparkles" size={14} color="#fff" />
+                <Image source={MASCOT_IMG} style={styles.mascotSmallImg} resizeMode="contain" />
               </View>
               <View style={styles.botBubble}>
                 <ActivityIndicator color={COLORS.primary} size="small" />
@@ -412,22 +386,28 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: COLORS.primary,
+    backgroundColor: "#FFE8D6",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: COLORS.primary,
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 2 },
+    overflow: "hidden",
+  },
+  mascotImg: {
+    width: 42,
+    height: 42,
   },
   mascotSmall: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: COLORS.primary,
+    backgroundColor: "#FFE8D6",
     alignItems: "center",
     justifyContent: "center",
     marginStart: 8,
+    overflow: "hidden",
+  },
+  mascotSmallImg: {
+    width: 28,
+    height: 28,
   },
   headerTitle: { color: COLORS.textPrimary, fontSize: 20, fontWeight: "900", textAlign: "right" },
   headerSub: { color: COLORS.textMuted, fontSize: 12, textAlign: "right" },
