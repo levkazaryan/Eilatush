@@ -117,20 +117,6 @@ export default function HomeScreen() {
         />
 
         <View style={styles.chipsRow}>
-          <View style={styles.chipsFlex}>
-            {BANDS.map((b) => (
-              <FilterChip
-                key={b.key}
-                label={b.label}
-                active={band === b.key}
-                onPress={() => setBand(b.key)}
-                testID={`band-chip-${b.key}`}
-              />
-            ))}
-          </View>
-        </View>
-
-        <View style={[styles.chipsRow, { marginTop: 4 }]}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
