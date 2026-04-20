@@ -208,10 +208,18 @@ function DayStrip({
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const range: { date: string; count: number; isToday: boolean }[] = [];
+    const toLocalISO = (d: Date) => {
+      // YYYY-MM-DD in local time (avoid toISOString which returns UTC and
+      // shifts us a day backwards in Israel after midnight local).
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    };
     for (let i = 0; i < 14; i++) {
       const dt = new Date(today);
       dt.setDate(today.getDate() + i);
-      const iso = dt.toISOString().slice(0, 10);
+      const iso = toLocalISO(dt);
       const count = days.find((d) => d.date === iso)?.count ?? 0;
       range.push({ date: iso, count, isToday: i === 0 });
     }
