@@ -17,6 +17,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from scrapers import run_all_scrapers
 from jobs import run_all_job_scrapers
 from businesses import run_all_business_scrapers
+from events import run_all_event_scrapers
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -133,19 +134,86 @@ async def root():
     return {"message": "Eilatush API – אילתוש"}
 
 @api_router.get("/events")
-async def get_events(band: Optional[str] = None, category: Optional[str] = None):
+async def get_events(
+    band: Optional[str] = None,
+    category: Optional[str] = None,
+    date: Optional[str] = None,        # YYYY-MM-DD for a specific day
+    limit: int = 500,
+):
     q: Dict[str, Any] = {}
     if category:
         q["category"] = category
-    docs = await db.events.find(q, {"_id": 0}).to_list(500)
-    # sort by start time
-    docs.sort(key=lambda d: d["starts_at"])
+    # date filter: events whose start falls in the requested Israeli-local day
+    if date:
+        try:
+            y, m, d = (int(x) for x in date.split("-"))
+            # Israel local day → UTC window (IST = UTC+2)
+            from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+            day_start_local = _dt(y, m, d, 0, 0, tzinfo=_tz(_td(hours=2)))
+            day_end_local = day_start_local + _td(days=1)
+            q["starts_at"] = {
+                "$gte": day_start_local.astimezone(_tz.utc),
+                "$lt": day_end_local.astimezone(_tz.utc),
+            }
+        except Exception:
+            pass
+    docs = await db.events.find(q, {"_id": 0}).to_list(limit)
+    # sort by start time (earliest first)
+    docs.sort(key=lambda d: d.get("starts_at") or datetime.now(timezone.utc))
     if band:
         docs = [d for d in docs if _time_band(d["starts_at"]) == band]
     # add computed band field
     for d in docs:
         d["band"] = _time_band(d["starts_at"])
     return docs
+
+
+@api_router.post("/events/refresh")
+async def refresh_events() -> Dict[str, Any]:
+    """Manual trigger for the event scrape + categorization pipeline."""
+    count = await _run_events_scrape()
+    return {"ok": True, "fetched": count}
+
+
+@api_router.get("/events/days")
+async def events_days() -> List[Dict[str, Any]]:
+    """Return {date, count, label} for each upcoming day that has events (next 30)."""
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    ist = _tz(_td(hours=2))
+    now = _dt.now(ist)
+    horizon = now + _td(days=30)
+    docs = await db.events.find(
+        {"starts_at": {"$gte": now.astimezone(_tz.utc), "$lt": horizon.astimezone(_tz.utc)}},
+        {"_id": 0, "starts_at": 1},
+    ).to_list(5000)
+    by_day: Dict[str, int] = {}
+    for d in docs:
+        sa = d.get("starts_at")
+        if not sa:
+            continue
+        if sa.tzinfo is None:
+            sa = sa.replace(tzinfo=_tz.utc)
+        key = sa.astimezone(ist).strftime("%Y-%m-%d")
+        by_day[key] = by_day.get(key, 0) + 1
+    out = [{"date": k, "count": v} for k, v in sorted(by_day.items())]
+    return out
+
+
+@api_router.get("/events/status")
+async def events_status() -> Dict[str, Any]:
+    total = await db.events.count_documents({})
+    by_source: Dict[str, int] = {}
+    async for d in db.events.aggregate([
+        {"$group": {"_id": "$source", "c": {"$sum": 1}}}
+    ]):
+        by_source[d["_id"] or "seed"] = d["c"]
+    latest = await db.events.find({"fetched_at": {"$exists": True}}, {"_id": 0, "fetched_at": 1}) \
+        .sort("fetched_at", -1).limit(1).to_list(1)
+    return {
+        "total": total,
+        "by_source": by_source,
+        "last_updated_at": (latest[0]["fetched_at"].isoformat() if latest else None),
+    }
 
 def _split_csv(val: Optional[str]) -> List[str]:
     if not val:
@@ -805,6 +873,12 @@ async def on_startup():
         await db.businesses.delete_many({"fingerprint": {"$exists": False}})
     except Exception:
         pass
+    # Clear legacy seeded demo events — real scraped events always have a
+    # `source` field (seed records from early development do not).
+    try:
+        await db.events.delete_many({"source": {"$exists": False}})
+    except Exception:
+        pass
     # start scheduler + kick off first scrape in background.
     # Skip startup-scrape for a collection if it already has sufficient data
     # — this avoids saturating the event loop with LLM tagging on every
@@ -834,6 +908,14 @@ async def on_startup():
             _run_businesses_scrape,
             500,
             "businesses",
+        )
+    )
+    asyncio.create_task(
+        _maybe_run(
+            lambda: db.events.count_documents({"source": {"$exists": True}}),
+            _run_events_scrape,
+            20,
+            "events",
         )
     )
 
@@ -1037,6 +1119,91 @@ async def _run_businesses_scrape() -> int:
         logger.exception("businesses auto-tag failed (non-fatal): %s", e)
 
     logger.info("businesses scrape job done: %d items upserted+tagged", count)
+    return count
+
+
+async def _run_events_scrape() -> int:
+    """Scrape all event sources, dedupe, upsert and tag (Claude 4.5)."""
+    logger.info("events scrape job starting…")
+    try:
+        items = await run_all_event_scrapers()
+    except Exception as e:
+        logger.exception("events scrape failed: %s", e)
+        return 0
+    if not items:
+        logger.warning("events scrape produced 0 items")
+        return 0
+
+    # Preserve existing tags so we don't re-pay LLM credits each run.
+    existing_tags: Dict[str, List[str]] = {}
+    try:
+        async for d in db.events.find(
+            {"tags": {"$exists": True}},
+            {"id": 1, "tags": 1, "_id": 0},
+        ):
+            if d.get("tags"):
+                existing_tags[d["id"]] = d["tags"]
+    except Exception:
+        pass
+    for it in items:
+        if it["id"] in existing_tags:
+            it["tags"] = existing_tags[it["id"]]
+
+    count = 0
+    scraped_ids: List[str] = []
+    for it in items:
+        try:
+            await db.events.update_one({"id": it["id"]}, {"$set": it}, upsert=True)
+            scraped_ids.append(it["id"])
+            count += 1
+        except Exception as e:
+            logger.warning("events upsert failed for %s: %s", it.get("id"), e)
+
+    # Purge expired scraped events (older than 1 day ago) that weren't seen
+    # this run. Keeps the collection tidy.
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=2)
+        await db.events.delete_many({
+            "source": {"$exists": True},
+            "starts_at": {"$lt": cutoff},
+        })
+    except Exception:
+        pass
+
+    # LLM categorization via the Businesses categorizer (reuses same taxonomy).
+    # We keep it simple: one tag per event representing category (party /
+    # concert / show / activity / food / sport / cinema).
+    try:
+        to_tag = [it for it in items if not it.get("tags")]
+        if to_tag:
+            logger.info("tagging %d new events with LLM…", len(to_tag))
+            # Adapter: pass a simplified record shape to the businesses tagger.
+            adapted = [
+                {
+                    "id": it["id"],
+                    "name": it["title"],
+                    "subtitle": it.get("venue") or "",
+                    "description": it.get("description") or "",
+                    "type": "event",
+                }
+                for it in to_tag
+            ]
+            from businesses.categorizer import tag_records_batch
+            tag_lists = await tag_records_batch(adapted, concurrency=4)
+            for it, tags in zip(to_tag, tag_lists):
+                if not tags:
+                    continue
+                it["tags"] = tags[:3]
+                try:
+                    await db.events.update_one(
+                        {"id": it["id"]}, {"$set": {"tags": it["tags"]}}
+                    )
+                except Exception:
+                    pass
+    except Exception as e:
+        logger.exception("events auto-tag failed (non-fatal): %s", e)
+
+    logger.info("events scrape job done: %d upserted", count)
     return count
 
 

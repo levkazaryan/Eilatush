@@ -5,11 +5,17 @@ const API = process.env.EXPO_PUBLIC_BACKEND_URL;
 
 export const api = {
   base: API,
-  async events(params: { band?: string; category?: string } = {}) {
+  async events(params: { band?: string; category?: string; date?: string } = {}) {
     const q = new URLSearchParams();
     if (params.band) q.set("band", params.band);
     if (params.category) q.set("category", params.category);
+    if (params.date) q.set("date", params.date);
     const r = await fetch(`${API}/api/events?${q.toString()}`);
+    return r.json();
+  },
+  async eventDays() {
+    const r = await fetch(`${API}/api/events/days`);
+    if (!r.ok) return [];
     return r.json();
   },
   async businesses(params: {

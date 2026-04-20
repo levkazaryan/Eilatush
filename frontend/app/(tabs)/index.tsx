@@ -8,6 +8,7 @@ import {
   ScrollView,
   RefreshControl,
   ActivityIndicator,
+  Pressable,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -35,16 +36,25 @@ const CATEGORIES: { key: string; label: string }[] = [
 
 export default function HomeScreen() {
   const [events, setEvents] = useState<EventT[]>([]);
+  const [days, setDays] = useState<{ date: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [band, setBand] = useState<(typeof BANDS)[number]["key"]>("all");
   const [category, setCategory] = useState<string>("");
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
 
   const load = useCallback(async () => {
     try {
-      const data = await api.events({ category: category || undefined });
+      const [data, dayList] = await Promise.all([
+        api.events({
+          category: category || undefined,
+          date: selectedDate || undefined,
+        }),
+        api.eventDays(),
+      ]);
       setEvents(Array.isArray(data) ? data : []);
+      setDays(Array.isArray(dayList) ? dayList : []);
     } catch (e) {
       console.warn("load events", e);
       setEvents([]);
@@ -52,7 +62,7 @@ export default function HomeScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [category]);
+  }, [category, selectedDate]);
 
   useEffect(() => {
     setLoading(true);
@@ -138,6 +148,13 @@ export default function HomeScreen() {
           </ScrollView>
         </View>
 
+        {/* Day strip — pick a date to filter events */}
+        <DayStrip
+          days={days}
+          selected={selectedDate}
+          onSelect={(d) => setSelectedDate(d)}
+        />
+
         {loading ? (
           <View style={{ paddingVertical: 40 }}>
             <ActivityIndicator color={COLORS.primary} />
@@ -187,20 +204,98 @@ export default function HomeScreen() {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Day strip — horizontal scrollable date selector
+// ---------------------------------------------------------------------------
+const HEB_DAY_SHORT = ["א'", "ב'", "ג'", "ד'", "ה'", "ו'", "ש'"];
+
+function DayStrip({
+  days,
+  selected,
+  onSelect,
+}: {
+  days: { date: string; count: number }[];
+  selected: string | null;
+  onSelect: (d: string | null) => void;
+}) {
+  const items = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const range: { date: string; count: number; isToday: boolean }[] = [];
+    for (let i = 0; i < 14; i++) {
+      const dt = new Date(today);
+      dt.setDate(today.getDate() + i);
+      const iso = dt.toISOString().slice(0, 10);
+      const count = days.find((d) => d.date === iso)?.count ?? 0;
+      range.push({ date: iso, count, isToday: i === 0 });
+    }
+    return range;
+  }, [days]);
+
+  return (
+    <View style={styles.dayStripRow}>
+      <Text style={styles.dayStripLabel}>לוח שנה</Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.dayStripContent}
+      >
+        <Pressable
+          onPress={() => onSelect(null)}
+          style={({ pressed }) => [
+            styles.dayCell,
+            selected === null && styles.dayCellActive,
+            pressed && { opacity: 0.7 },
+          ]}
+          testID="day-cell-all"
+        >
+          <Ionicons
+            name="sparkles"
+            size={16}
+            color={selected === null ? "#fff" : COLORS.primary}
+          />
+          <Text style={[styles.dayCellDay, selected === null && styles.dayCellTextActive]}>הכל</Text>
+        </Pressable>
+        {items.map((d) => {
+          const dt = new Date(d.date + "T12:00:00");
+          const active = selected === d.date;
+          return (
+            <Pressable
+              key={d.date}
+              onPress={() => onSelect(d.date)}
+              style={({ pressed }) => [
+                styles.dayCell,
+                active && styles.dayCellActive,
+                d.count === 0 && !active && styles.dayCellEmpty,
+                pressed && { opacity: 0.7 },
+              ]}
+              testID={`day-cell-${d.date}`}
+            >
+              <Text style={[styles.dayCellDay, active && styles.dayCellTextActive]}>
+                {d.isToday ? "היום" : HEB_DAY_SHORT[dt.getDay()]}
+              </Text>
+              <Text style={[styles.dayCellNum, active && styles.dayCellTextActive]}>
+                {dt.getDate()}
+              </Text>
+              {d.count > 0 ? (
+                <View style={[styles.dayCountBadge, active && styles.dayCountBadgeActive]}>
+                  <Text style={[styles.dayCountText, active && { color: COLORS.primary }]}>
+                    {d.count}
+                  </Text>
+                </View>
+              ) : (
+                <View style={{ height: 14 }} />
+              )}
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.bg },
-  hero: {
-    height: 220,
-    backgroundColor: COLORS.surface,
-    justifyContent: "flex-end",
-  },
-  heroOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(12,12,18,0.55)",
-  },
-  heroContent: {
-    padding: SPACING.lg,
-  },
   brandRow: {
     flexDirection: "row-reverse",
     alignItems: "center",
@@ -216,21 +311,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   brandText: { color: "#fff", fontSize: 16, fontWeight: "900", letterSpacing: 0.5 },
-  heroTitle: {
-    color: "#fff",
-    fontSize: 30,
-    fontWeight: "900",
-    textAlign: "right",
-    writingDirection: "rtl",
-  },
-  heroSub: {
-    color: COLORS.textPrimary,
-    fontSize: 14,
-    marginTop: 6,
-    textAlign: "right",
-    writingDirection: "rtl",
-    opacity: 0.85,
-  },
   chipsRow: {
     paddingTop: SPACING.md,
     paddingBottom: 4,
@@ -244,5 +324,72 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     justifyContent: "flex-start",
     gap: 0,
+  },
+
+  // Day strip
+  dayStripRow: {
+    paddingTop: 4,
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.border,
+  },
+  dayStripLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: COLORS.textMuted,
+    textAlign: "right",
+    paddingHorizontal: SPACING.md,
+    marginBottom: 6,
+    writingDirection: "rtl",
+  },
+  dayStripContent: {
+    paddingHorizontal: SPACING.md,
+    flexDirection: "row",
+    gap: 8,
+  },
+  dayCell: {
+    width: 58,
+    paddingVertical: 10,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: "center",
+    gap: 2,
+  },
+  dayCellActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  dayCellEmpty: {
+    opacity: 0.45,
+  },
+  dayCellDay: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: COLORS.textSecondary,
+  },
+  dayCellNum: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: COLORS.textPrimary,
+  },
+  dayCellTextActive: { color: "#fff" },
+  dayCountBadge: {
+    minWidth: 22,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 10,
+    backgroundColor: "rgba(20,184,179,0.15)",
+    alignItems: "center",
+    marginTop: 2,
+  },
+  dayCountBadgeActive: {
+    backgroundColor: "#fff",
+  },
+  dayCountText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: COLORS.primary,
   },
 });
