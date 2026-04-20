@@ -144,6 +144,19 @@ export const openPhone = (phone?: string) => {
   Linking.openURL(url).catch(() => {});
 };
 
+/**
+ * Format a stored phone (+972xxxxxxxx / 972xxxxxxxx) to the local Israeli
+ * display format with a leading "0" (e.g. "+972535319943" → "0535319943").
+ * Falls back to the raw string if the input is not an Israeli number.
+ */
+export const displayPhone = (phone?: string | null): string => {
+  if (!phone) return "";
+  const s = String(phone).trim();
+  if (s.startsWith("+972")) return "0" + s.slice(4);
+  if (s.startsWith("972")) return "0" + s.slice(3);
+  return s;
+};
+
 export const openEmail = (email?: string, subject?: string, body?: string) => {
   if (!email) return;
   const params: string[] = [];

@@ -22,6 +22,7 @@ import {
   openWhatsApp,
   openEmail,
   openWaze,
+  displayPhone,
 } from "../../api";
 import { BusinessT, BIZ_CATEGORY } from "../../components";
 import { COLORS, RADIUS, SPACING } from "../../theme";
@@ -168,7 +169,7 @@ export default function BusinessDetail() {
               <Ionicons name="call" size={18} color={COLORS.success} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.infoLabel}>טלפון</Text>
-                <Text style={styles.infoValue}>{item.phone}</Text>
+                <Text style={styles.infoValue}>{displayPhone(item.phone)}</Text>
               </View>
               <Ionicons name="chevron-back" size={18} color={COLORS.textMuted} />
             </Pressable>
