@@ -139,20 +139,6 @@ export default function BusinessesScreen() {
       {/* Top segmented toggle */}
       <View style={styles.segment}>
         <Pressable
-          onPress={() => switchType("business")}
-          style={[styles.segmentItem, type === "business" && styles.segmentItemActive]}
-          testID="biz-toggle-businesses"
-        >
-          <Ionicons
-            name="storefront"
-            size={16}
-            color={type === "business" ? "#fff" : COLORS.textSecondary}
-          />
-          <Text style={[styles.segmentText, type === "business" && styles.segmentTextActive]}>
-            עסקים
-          </Text>
-        </Pressable>
-        <Pressable
           onPress={() => switchType("professional")}
           style={[styles.segmentItem, type === "professional" && styles.segmentItemActive]}
           testID="biz-toggle-professionals"
@@ -164,6 +150,20 @@ export default function BusinessesScreen() {
           />
           <Text style={[styles.segmentText, type === "professional" && styles.segmentTextActive]}>
             אנשי מקצוע
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => switchType("business")}
+          style={[styles.segmentItem, type === "business" && styles.segmentItemActive]}
+          testID="biz-toggle-businesses"
+        >
+          <Ionicons
+            name="storefront"
+            size={16}
+            color={type === "business" ? "#fff" : COLORS.textSecondary}
+          />
+          <Text style={[styles.segmentText, type === "business" && styles.segmentTextActive]}>
+            עסקים
           </Text>
         </Pressable>
       </View>
@@ -463,6 +463,7 @@ const styles = StyleSheet.create({
   filterRow: {
     flexDirection: "row-reverse",
     alignItems: "center",
+    justifyContent: "flex-end",
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.md,
     gap: 8,
