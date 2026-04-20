@@ -178,53 +178,53 @@ export function EventCard({ item }: { item: EventT }) {
   );
 }
 
-export const BIZ_CATEGORY: Record<string, { label: string; emoji: string }> = {
-  restaurants:     { label: "מסעדות",          emoji: "🍽️" },
-  cafes:           { label: "בתי קפה",         emoji: "☕" },
-  bars:            { label: "פאבים וברים",      emoji: "🍺" },
-  fast_food:       { label: "מזון מהיר",        emoji: "🍔" },
-  attractions:     { label: "אטרקציות",        emoji: "🎢" },
-  hotels:          { label: "מלונאות",         emoji: "🏨" },
-  spa:             { label: "ספא",             emoji: "💆" },
-  beauty:          { label: "יופי",            emoji: "💅" },
-  fashion:         { label: "אופנה",           emoji: "👗" },
-  jewelry:         { label: "תכשיטים",         emoji: "💍" },
-  electronics:     { label: "אלקטרוניקה",      emoji: "💻" },
-  appliances:      { label: "חשמל ביתי",       emoji: "🔌" },
-  phones:          { label: "סלולר",           emoji: "📱" },
-  home:            { label: "ריהוט",           emoji: "🛋️" },
-  supermarket:     { label: "סופר",            emoji: "🛒" },
-  shopping_center: { label: "מרכזי קניות",     emoji: "🏬" },
-  travel:          { label: "משרדי נסיעות",    emoji: "✈️" },
-  transport:       { label: "תחבורה",          emoji: "🚗" },
-  marine:          { label: "ספורט ימי",       emoji: "🤿" },
-  consulate:       { label: "קונסוליות",       emoji: "🏛️" },
-  services_biz:    { label: "שירותים",         emoji: "🧾" },
+export const BIZ_CATEGORY: Record<string, { label: string; emoji: string; icon: keyof typeof Ionicons.glyphMap; color: string }> = {
+  restaurants:     { label: "מסעדות",          emoji: "🍽️", icon: "restaurant",              color: "#F97316" },
+  cafes:           { label: "בתי קפה",         emoji: "☕", icon: "cafe",                    color: "#8B4513" },
+  bars:            { label: "פאבים וברים",      emoji: "🍺", icon: "beer",                    color: "#D97706" },
+  fast_food:       { label: "מזון מהיר",        emoji: "🍔", icon: "fast-food",               color: "#EA580C" },
+  attractions:     { label: "אטרקציות",        emoji: "🎢", icon: "happy",                   color: "#DB2777" },
+  hotels:          { label: "מלונאות",         emoji: "🏨", icon: "bed",                     color: "#7C3AED" },
+  spa:             { label: "ספא",             emoji: "💆", icon: "sparkles",                color: "#EC4899" },
+  beauty:          { label: "יופי",            emoji: "💅", icon: "rose",                    color: "#EC4899" },
+  fashion:         { label: "אופנה",           emoji: "👗", icon: "shirt",                   color: "#8B5CF6" },
+  jewelry:         { label: "תכשיטים",         emoji: "💍", icon: "diamond",                 color: "#0EA5E9" },
+  electronics:     { label: "אלקטרוניקה",      emoji: "💻", icon: "laptop",                  color: "#3B82F6" },
+  appliances:      { label: "חשמל ביתי",       emoji: "🔌", icon: "bulb",                    color: "#F59E0B" },
+  phones:          { label: "סלולר",           emoji: "📱", icon: "phone-portrait",          color: "#10B981" },
+  home:            { label: "ריהוט",           emoji: "🛋️", icon: "home",                    color: "#92400E" },
+  supermarket:     { label: "סופר",            emoji: "🛒", icon: "cart",                    color: "#16A34A" },
+  shopping_center: { label: "מרכזי קניות",     emoji: "🏬", icon: "bag-handle",              color: "#A855F7" },
+  travel:          { label: "משרדי נסיעות",    emoji: "✈️", icon: "airplane",                color: "#0284C7" },
+  transport:       { label: "תחבורה",          emoji: "🚗", icon: "car",                     color: "#1E40AF" },
+  marine:          { label: "ספורט ימי",       emoji: "🤿", icon: "boat",                    color: "#0891B2" },
+  consulate:       { label: "קונסוליות",       emoji: "🏛️", icon: "business",                color: "#6B7280" },
+  services_biz:    { label: "שירותים",         emoji: "🧾", icon: "briefcase",               color: "#64748B" },
   // Professionals
-  construction:    { label: "שיפוצים",         emoji: "🏗️" },
-  electrician:     { label: "חשמלאות",         emoji: "⚡" },
-  plumber:         { label: "אינסטלציה",       emoji: "🔧" },
-  ac:              { label: "מיזוג",           emoji: "❄️" },
-  appliance_fix:   { label: "תיקון חשמל",      emoji: "🔌" },
-  carpentry:       { label: "נגרות",           emoji: "🪚" },
-  sealing:         { label: "איטום",           emoji: "🧱" },
-  cleaning_pro:    { label: "ניקיון",          emoji: "🧹" },
-  gardening:       { label: "גינון",           emoji: "🌳" },
-  moving:          { label: "הובלות",          emoji: "📦" },
-  locksmith:       { label: "מנעולנות",        emoji: "🔑" },
-  pest:            { label: "הדברה",           emoji: "🐛" },
-  auto_repair:     { label: "מוסכים",          emoji: "🚙" },
-  tutor:           { label: "מורים פרטיים",    emoji: "📚" },
-  therapy:         { label: "טיפול רגשי",      emoji: "💭" },
-  health_pro:      { label: "בריאות",          emoji: "🏥" },
-  lawyer:          { label: "עו״ד",            emoji: "⚖️" },
-  accountant:      { label: "רו״ח",            emoji: "🧮" },
-  tech_pro:        { label: "מחשבים",          emoji: "💻" },
-  graphics:        { label: "גרפיקה",          emoji: "🎨" },
-  photo:           { label: "צילום",           emoji: "📷" },
-  events_pro:      { label: "אירועים",         emoji: "🎉" },
-  beauty_home:     { label: "יופי ביתי",        emoji: "💇" },
-  realestate:      { label: "נדל״ן ותיווך",      emoji: "🏠" },
+  construction:    { label: "שיפוצים",         emoji: "🏗️", icon: "hammer",                  color: "#F59E0B" },
+  electrician:     { label: "חשמלאות",         emoji: "⚡", icon: "flash",                   color: "#EAB308" },
+  plumber:         { label: "אינסטלציה",       emoji: "🔧", icon: "water",                   color: "#0EA5E9" },
+  ac:              { label: "מיזוג",           emoji: "❄️", icon: "snow",                    color: "#38BDF8" },
+  appliance_fix:   { label: "תיקון חשמל",      emoji: "🔌", icon: "hardware-chip",           color: "#F59E0B" },
+  carpentry:       { label: "נגרות",           emoji: "🪚", icon: "build",                   color: "#92400E" },
+  sealing:         { label: "איטום",           emoji: "🧱", icon: "layers",                  color: "#B45309" },
+  cleaning_pro:    { label: "ניקיון",          emoji: "🧹", icon: "sparkles",                color: "#22D3EE" },
+  gardening:       { label: "גינון",           emoji: "🌳", icon: "leaf",                    color: "#16A34A" },
+  moving:          { label: "הובלות",          emoji: "📦", icon: "cube",                    color: "#CA8A04" },
+  locksmith:       { label: "מנעולנות",        emoji: "🔑", icon: "key",                     color: "#D97706" },
+  pest:            { label: "הדברה",           emoji: "🐛", icon: "bug",                     color: "#65A30D" },
+  auto_repair:     { label: "מוסכים",          emoji: "🚙", icon: "car-sport",               color: "#1E40AF" },
+  tutor:           { label: "מורים פרטיים",    emoji: "📚", icon: "school",                  color: "#9333EA" },
+  therapy:         { label: "טיפול רגשי",      emoji: "💭", icon: "heart",                   color: "#E11D48" },
+  health_pro:      { label: "בריאות",          emoji: "🏥", icon: "medical",                 color: "#DC2626" },
+  lawyer:          { label: "עו״ד",            emoji: "⚖️", icon: "library",                 color: "#1F2937" },
+  accountant:      { label: "רו״ח",            emoji: "🧮", icon: "calculator",              color: "#0F766E" },
+  tech_pro:        { label: "מחשבים",          emoji: "💻", icon: "desktop",                 color: "#2563EB" },
+  graphics:        { label: "גרפיקה",          emoji: "🎨", icon: "color-palette",           color: "#DB2777" },
+  photo:           { label: "צילום",           emoji: "📷", icon: "camera",                  color: "#7C3AED" },
+  events_pro:      { label: "אירועים",         emoji: "🎉", icon: "balloon",                 color: "#F472B6" },
+  beauty_home:     { label: "יופי ביתי",        emoji: "💇", icon: "cut",                     color: "#EC4899" },
+  realestate:      { label: "נדל״ן ותיווך",      emoji: "🏠", icon: "home",                   color: "#0EA5E9" },
 };
 
 export function BusinessCard({ item, onPress }: { item: BusinessT; onPress?: () => void }) {
@@ -240,11 +240,21 @@ export function BusinessCard({ item, onPress }: { item: BusinessT; onPress?: () 
       {!isPro && item.image ? (
         <Image source={{ uri: item.image }} style={styles.bizImage} />
       ) : (
-        <View style={[styles.bizImage, styles.bizImagePlaceholder]}>
+        <View
+          style={[
+            styles.bizImage,
+            styles.bizImagePlaceholder,
+            isPro && tagInfo ? { backgroundColor: tagInfo.color + "18" } : null,
+          ]}
+        >
           <Ionicons
-            name={isPro ? "construct-outline" : "storefront-outline"}
+            name={
+              isPro
+                ? (tagInfo?.icon || "construct-outline")
+                : (tagInfo?.icon || "storefront-outline")
+            }
             size={34}
-            color={COLORS.textMuted}
+            color={isPro && tagInfo ? tagInfo.color : COLORS.textMuted}
           />
         </View>
       )}

@@ -72,6 +72,8 @@ export default function BusinessDetail() {
   }
 
   const isPro = item.type === "professional";
+  const primaryTag = (item.tags || [])[0];
+  const tagInfo = primaryTag ? BIZ_CATEGORY[primaryTag] : null;
 
   return (
     <SafeAreaView style={styles.root} edges={["top"]}>
@@ -93,11 +95,21 @@ export default function BusinessDetail() {
         ) : isPro && item.image ? (
           <Image source={{ uri: item.image }} style={styles.heroPro} resizeMode="contain" />
         ) : (
-          <View style={[styles.hero, styles.heroPlaceholder]}>
+          <View
+            style={[
+              styles.hero,
+              styles.heroPlaceholder,
+              isPro && tagInfo ? { backgroundColor: tagInfo.color + "18" } : null,
+            ]}
+          >
             <Ionicons
-              name={isPro ? "construct-outline" : "storefront-outline"}
+              name={
+                isPro
+                  ? (tagInfo?.icon || "construct-outline")
+                  : (tagInfo?.icon || "storefront-outline")
+              }
               size={60}
-              color={COLORS.textMuted}
+              color={isPro && tagInfo ? tagInfo.color : COLORS.textMuted}
             />
           </View>
         )}
