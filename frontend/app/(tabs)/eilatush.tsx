@@ -449,17 +449,14 @@ const styles = StyleSheet.create({
   },
   brandRow: { flexDirection: "row-reverse", alignItems: "center", gap: 12 },
   mascot: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "#FFE8D6",
+    width: 126,
+    height: 126,
     alignItems: "center",
     justifyContent: "center",
-    overflow: "hidden",
   },
   mascotImg: {
-    width: 42,
-    height: 42,
+    width: 126,
+    height: 126,
   },
   mascotSmall: {
     width: 40,
