@@ -93,6 +93,7 @@ class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
     history: Optional[List[ChatHistoryItem]] = None
+    user_gender: Optional[str] = None  # "m" | "f" | None
 
 # ------------------- HELPERS -------------------
 
@@ -752,20 +753,48 @@ async def _generate_reply(
     results: List[Dict[str, Any]],
     session_id: str,
     weather: str,
+    user_gender: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run a second LLM pass to craft a conversational reply + follow-ups."""
+    # Build gender-aware directive to inject into system message
+    if user_gender == "m":
+        gender_rule = (
+            "המשתמש הוא *גבר*. פני אליו תמיד בלשון זכר: "
+            "'אתה', 'תגיד', 'בא לך', 'אתה יכול', 'מצאתי לך'. "
+            "לעולם אל תפני אליו בלשון נקבה."
+        )
+    elif user_gender == "f":
+        gender_rule = (
+            "המשתמשת היא *אישה*. פני אליה תמיד בלשון נקבה: "
+            "'את', 'תגידי', 'בא לך', 'את יכולה', 'מצאתי לך'. "
+            "לעולם אל תפני אליה בלשון זכר."
+        )
+    else:
+        gender_rule = (
+            "אם לא ברור המגדר של המשתמש - השתמשי בצורה ניטרלית או כפולה 'שאל/י'."
+        )
+
     prompt = EILATUSH_REPLY_PROMPT.format(
         user_msg=user_msg,
         intent=intent,
         weather_ctx=weather,
         results_summary=_summarize_results(intent, results),
     )
+    # Append gender rule to prompt so Claude adapts each turn
+    prompt = f"{prompt}\n\nכללי פנייה למשתמש: {gender_rule}"
+
+    system_msg = (
+        "את אילתוש - חברה מקומית לתושבי אילת. "
+        "מדברת תמיד בלשון נקבה על עצמך. קצרה, חמה, עברית. "
+        "אל תשתמשי באימוג'י דג. "
+        f"{gender_rule}"
+    )
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
         chat = LlmChat(
             api_key=EMERGENT_LLM_KEY,
             session_id=f"{session_id}_reply",
-            system_message="את אילתוש - חברה מקומית לתושבי אילת. מדברת תמיד בלשון נקבה על עצמך. קצרה, חמה, עברית. אל תשתמשי באימוג'י דג.",
+            system_message=system_msg,
         ).with_model("anthropic", "claude-sonnet-4-5-20250929")
         resp = await chat.send_message(UserMessage(text=prompt))
         text = resp.strip()
@@ -858,7 +887,7 @@ async def eilatush_chat(body: ChatRequest):
 
     # -- 2nd LLM pass for conversational reply + follow-ups --
     weather = await _fetch_weather_brief()
-    gen = await _generate_reply(user_msg, intent, results, session_id, weather)
+    gen = await _generate_reply(user_msg, intent, results, session_id, weather, body.user_gender)
 
     return {
         "session_id": session_id,

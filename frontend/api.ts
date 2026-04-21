@@ -122,11 +122,12 @@ export const api = {
     message: string,
     session_id?: string,
     history?: { role: string; text: string }[],
+    user_gender?: "m" | "f",
   ) {
     const r = await fetch(`${API}/api/eilatush/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, session_id, history }),
+      body: JSON.stringify({ message, session_id, history, user_gender }),
     });
     return r.json();
   },

@@ -52,7 +52,38 @@ const DEFAULT_FOLLOWUPS = [
 
 const STORAGE_KEY = "eilatush_chat_v3";
 const SESSION_KEY = "eilatush_session_v3";
+const GENDER_KEY = "eilatush_user_gender_v1";
 const MAX_HISTORY = 40; // keep last N messages in storage
+
+type UserGender = "m" | "f" | null;
+
+const GENDER_SELECT_ID = "gender-select";
+
+function welcomeTextFor(g: UserGender): string {
+  if (g === "m") {
+    return "היי! אני אילתוש 🌴\nאני כאן כדי לעזור לך לגלות מה קורה בעיר - אירועים, מקומות לאכול, עבודה, חדשות. שאל אותי כל דבר ואני אחזור עם הכל בתוך שניות.";
+  }
+  if (g === "f") {
+    return "היי! אני אילתוש 🌴\nאני כאן כדי לעזור לך לגלות מה קורה בעיר - אירועים, מקומות לאכול, עבודה, חדשות. שאלי אותי כל דבר ואני אחזור עם הכל בתוך שניות.";
+  }
+  return "";
+}
+
+function buildWelcomeMsg(g: UserGender, freshChat = false): Msg {
+  if (!g) {
+    return {
+      id: GENDER_SELECT_ID,
+      role: "bot",
+      text: "היי! אני אילתוש 🌴\nשמחה להכיר! לפני שנתחיל - איך מתאים לך שאפנה?",
+    };
+  }
+  return {
+    id: "welcome",
+    role: "bot",
+    text: freshChat ? "שיחה חדשה! על מה נתחיל?" : welcomeTextFor(g),
+    followUps: DEFAULT_FOLLOWUPS.slice(0, 3),
+  };
+}
 
 const CONTACT_PHONE = "972535319943"; // +972-53-531-9943
 const APP_URL =
@@ -110,14 +141,8 @@ async function inviteFriend() {
 }
 
 export default function EilatushScreen() {
-  const [messages, setMessages] = useState<Msg[]>([
-    {
-      id: "welcome",
-      role: "bot",
-      text: "היי! אני אילתוש 🌴\nאני כאן כדי לעזור לך לגלות מה קורה בעיר - אירועים, מקומות לאכול, עבודה, חדשות. שאל/י אותי כל דבר ואני אחזור עם הכל בתוך שניות.",
-      followUps: DEFAULT_FOLLOWUPS.slice(0, 3),
-    },
-  ]);
+  const [userGender, setUserGender] = useState<UserGender>(null);
+  const [messages, setMessages] = useState<Msg[]>([buildWelcomeMsg(null)]);
   const [input, setInput] = useState("");
   const [sessionId, setSessionId] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
@@ -128,17 +153,29 @@ export default function EilatushScreen() {
   useEffect(() => {
     (async () => {
       try {
-        const [rawMsgs, rawSess] = await Promise.all([
+        const [rawMsgs, rawSess, rawGender] = await Promise.all([
           AsyncStorage.getItem(STORAGE_KEY),
           AsyncStorage.getItem(SESSION_KEY),
+          AsyncStorage.getItem(GENDER_KEY),
         ]);
-        if (rawMsgs) {
-          const saved = JSON.parse(rawMsgs);
-          if (Array.isArray(saved) && saved.length > 0) {
-            setMessages(saved);
-          }
-        }
+        const g: UserGender =
+          rawGender === "m" || rawGender === "f" ? rawGender : null;
+        setUserGender(g);
         if (rawSess) setSessionId(rawSess);
+
+        let hydratedFromSaved = false;
+        if (rawMsgs) {
+          try {
+            const saved = JSON.parse(rawMsgs);
+            if (Array.isArray(saved) && saved.length > 0) {
+              setMessages(saved);
+              hydratedFromSaved = true;
+            }
+          } catch {}
+        }
+        if (!hydratedFromSaved) {
+          setMessages([buildWelcomeMsg(g)]);
+        }
       } catch (e) {
         console.warn("chat load failed", e);
       } finally {
@@ -158,16 +195,19 @@ export default function EilatushScreen() {
     AsyncStorage.setItem(SESSION_KEY, sessionId).catch(() => {});
   }, [sessionId, hydrated]);
 
+  const pickGender = async (g: UserGender) => {
+    if (!g) return;
+    setUserGender(g);
+    AsyncStorage.setItem(GENDER_KEY, g).catch(() => {});
+    // Replace the gender-select message with a tailored welcome
+    setMessages([buildWelcomeMsg(g)]);
+  };
+
   const clearChat = async () => {
     const doClear = () => {
-      setMessages([
-        {
-          id: "welcome",
-          role: "bot",
-          text: "שיחה חדשה! על מה נתחיל?",
-          followUps: DEFAULT_FOLLOWUPS.slice(0, 3),
-        },
-      ]);
+      // Preserve userGender across clear — show fresh welcome for the known gender,
+      // or ask again if we somehow never stored one.
+      setMessages([buildWelcomeMsg(userGender, true)]);
       setSessionId(undefined);
       Promise.all([
         AsyncStorage.removeItem(STORAGE_KEY),
@@ -191,14 +231,14 @@ export default function EilatushScreen() {
     const userMsg: Msg = { id: `u-${Date.now()}`, role: "user", text };
     // Build history from visible (non-welcome) messages
     const history = messages
-      .filter((m) => m.id !== "welcome")
+      .filter((m) => m.id !== "welcome" && m.id !== GENDER_SELECT_ID)
       .slice(-8)
       .map((m) => ({ role: m.role === "user" ? "user" : "assistant", text: m.text }));
     setMessages((m) => [...m, userMsg]);
     setLoading(true);
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
     try {
-      const res = await api.chat(text, sessionId, history);
+      const res = await api.chat(text, sessionId, history, userGender ?? undefined);
       if (res.session_id) setSessionId(res.session_id);
       const botMsg: Msg = {
         id: `b-${Date.now()}`,
@@ -331,6 +371,32 @@ export default function EilatushScreen() {
                         ))}
                       </View>
                     )}
+                    {m.id === GENDER_SELECT_ID && (
+                      <View style={styles.genderRow}>
+                        <Pressable
+                          onPress={() => pickGender("m")}
+                          style={({ pressed }) => [
+                            styles.genderChip,
+                            pressed && { opacity: 0.75 },
+                          ]}
+                          testID="gender-male"
+                        >
+                          <Text style={styles.genderEmoji}>👨</Text>
+                          <Text style={styles.genderText}>בלשון זכר</Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => pickGender("f")}
+                          style={({ pressed }) => [
+                            styles.genderChip,
+                            pressed && { opacity: 0.75 },
+                          ]}
+                          testID="gender-female"
+                        >
+                          <Text style={styles.genderEmoji}>👩</Text>
+                          <Text style={styles.genderText}>בלשון נקבה</Text>
+                        </Pressable>
+                      </View>
+                    )}
                   </View>
                 </View>
               )}
@@ -452,6 +518,28 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   sugChipText: { color: COLORS.secondary, fontSize: 13, fontWeight: "700" },
+
+  genderRow: {
+    flexDirection: "row-reverse",
+    gap: 10,
+    marginTop: 14,
+  },
+  genderChip: {
+    flex: 1,
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: RADIUS.pill,
+    backgroundColor: "rgba(20,184,179,0.12)",
+    borderWidth: 1.5,
+    borderColor: "rgba(20,184,179,0.45)",
+    minHeight: 46,
+  },
+  genderEmoji: { fontSize: 18 },
+  genderText: { fontSize: 14, fontWeight: "800", color: COLORS.primary },
 
   headerActions: {
     flexDirection: "row-reverse",
