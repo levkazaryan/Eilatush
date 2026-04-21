@@ -1159,7 +1159,16 @@ async def _run_scrape_job() -> int:
 def _start_scheduler():
     scheduler = AsyncIOScheduler(timezone="UTC")
     scheduler.add_job(_run_scrape_job, "interval", hours=1, id="news_hourly", replace_existing=True)
-    scheduler.add_job(_run_jobs_scrape, "interval", hours=1, id="jobs_hourly", replace_existing=True)
+    # Jobs refresh every morning at 08:00 Israel local time.
+    scheduler.add_job(
+        _run_jobs_scrape,
+        "cron",
+        hour=8,
+        minute=0,
+        timezone="Asia/Jerusalem",
+        id="jobs_daily_0800",
+        replace_existing=True,
+    )
     # Businesses/professionals change slowly — weekly is plenty.
     scheduler.add_job(_run_businesses_scrape, "interval", days=7, id="biz_weekly", replace_existing=True)
     # Events refresh every morning at 08:00 Israel local time.
@@ -1174,7 +1183,7 @@ def _start_scheduler():
     )
     scheduler.start()
     app.state.scheduler = scheduler
-    logger.info("scheduler started (news+jobs hourly, biz weekly, events daily 08:00 Asia/Jerusalem)")
+    logger.info("scheduler started (news hourly, biz weekly, jobs+events daily 08:00 Asia/Jerusalem)")
 
 
 async def _run_jobs_scrape() -> int:
