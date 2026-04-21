@@ -1162,9 +1162,19 @@ def _start_scheduler():
     scheduler.add_job(_run_jobs_scrape, "interval", hours=1, id="jobs_hourly", replace_existing=True)
     # Businesses/professionals change slowly — weekly is plenty.
     scheduler.add_job(_run_businesses_scrape, "interval", days=7, id="biz_weekly", replace_existing=True)
+    # Events refresh every morning at 08:00 Israel local time.
+    scheduler.add_job(
+        _run_events_scrape,
+        "cron",
+        hour=8,
+        minute=0,
+        timezone="Asia/Jerusalem",
+        id="events_daily_0800",
+        replace_existing=True,
+    )
     scheduler.start()
     app.state.scheduler = scheduler
-    logger.info("scheduler started (news + jobs every 1h)")
+    logger.info("scheduler started (news+jobs hourly, biz weekly, events daily 08:00 Asia/Jerusalem)")
 
 
 async def _run_jobs_scrape() -> int:
