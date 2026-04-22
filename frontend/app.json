@@ -48,7 +48,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#14B8B3"
         }
-      ]
+      ],
+      "./plugins/withDisableAndroidLintChecks"
     ],
     "experiments": {
       "typedRoutes": true
