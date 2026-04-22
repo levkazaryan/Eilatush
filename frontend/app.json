@@ -2,6 +2,7 @@
   "expo": {
     "name": "אילתוש",
     "slug": "eilatush",
+    "owner": "levkazaryan",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -15,14 +16,17 @@
       "bundleIdentifier": "app.eilatush",
       "buildNumber": "1",
       "infoPlist": {
-        "CFBundleLocalizations": ["he", "en"],
+        "CFBundleLocalizations": [
+          "he",
+          "en"
+        ],
         "CFBundleDevelopmentRegion": "he",
         "NSLocationWhenInUseUsageDescription": "Show weather and events near you in Eilat"
       }
     },
     "android": {
       "package": "app.eilatush",
-      "versionCode": 1,
+      "versionCode": 2,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#14B8B3"
@@ -53,6 +57,11 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "cc2c7397-13c0-499f-aab2-a41c2bc214d6"
+      }
     }
   }
 }
