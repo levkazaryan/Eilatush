@@ -1,22 +1,37 @@
 {
   "expo": {
-    "name": "frontend",
-    "slug": "frontend",
+    "name": "אילתוש",
+    "slug": "eilatush",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "frontend",
-    "userInterfaceStyle": "automatic",
+    "scheme": "eilatush",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "primaryColor": "#14B8B3",
+    "description": "אילתוש — האפליקציה המקומית של אילת. אירועים, עסקים, עבודות, חדשות, ועוזרת AI חכמה בלחיצת כפתור.",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "app.eilatush",
+      "buildNumber": "1",
+      "infoPlist": {
+        "CFBundleLocalizations": ["he", "en"],
+        "CFBundleDevelopmentRegion": "he",
+        "NSLocationWhenInUseUsageDescription": "Show weather and events near you in Eilat"
+      }
     },
     "android": {
+      "package": "app.eilatush",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000"
+        "backgroundColor": "#14B8B3"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -31,12 +46,17 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#000"
+          "backgroundColor": "#14B8B3"
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "locales": {
+      "he": {
+        "CFBundleDisplayName": "אילתוש"
+      }
     }
   }
 }
