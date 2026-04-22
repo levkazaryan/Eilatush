@@ -10,15 +10,9 @@ import {
   ScrollView,
   ActivityIndicator,
   Dimensions,
-} from "react-native";
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withTiming,
-  withSequence,
+  Animated,
   Easing,
-} from "react-native-reanimated";
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { COLORS, RADIUS, SPACING } from "../theme";
@@ -97,49 +91,85 @@ function skyColors(hour: number): readonly [string, string, string] {
 // Animated sun / moon
 // ---------------------------------------------------------------------------
 function FloatingOrb({ isDay }: { isDay: boolean }) {
-  const translateY = useSharedValue(0);
-  const rotate = useSharedValue(0);
-  const glow = useSharedValue(0.6);
+  const translateY = useRef(new Animated.Value(0)).current;
+  const rotate = useRef(new Animated.Value(0)).current;
+  const glow = useRef(new Animated.Value(0.6)).current;
 
   useEffect(() => {
-    translateY.value = withRepeat(
-      withSequence(
-        withTiming(-8, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
-        withTiming(8, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
-      ),
-      -1,
-      true,
+    const bob = Animated.loop(
+      Animated.sequence([
+        Animated.timing(translateY, {
+          toValue: -8,
+          duration: 3000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(translateY, {
+          toValue: 8,
+          duration: 3000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
     );
-    rotate.value = withRepeat(
-      withTiming(360, { duration: 60000, easing: Easing.linear }),
-      -1,
-      false,
+    const spin = Animated.loop(
+      Animated.timing(rotate, {
+        toValue: 1,
+        duration: 60000,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
     );
-    glow.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration: 2500, easing: Easing.inOut(Easing.ease) }),
-        withTiming(0.6, { duration: 2500, easing: Easing.inOut(Easing.ease) }),
-      ),
-      -1,
-      true,
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(glow, {
+          toValue: 1,
+          duration: 2500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(glow, {
+          toValue: 0.6,
+          duration: 2500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
     );
+    bob.start();
+    spin.start();
+    pulse.start();
+    return () => {
+      bob.stop();
+      spin.stop();
+      pulse.stop();
+    };
   }, []);
 
-  const orbStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: translateY.value },
-      { rotate: `${rotate.value}deg` },
-    ],
-  }));
-  const glowStyle = useAnimatedStyle(() => ({
-    opacity: glow.value,
-    transform: [{ scale: 0.9 + glow.value * 0.25 }],
-  }));
+  const spinDeg = rotate.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
+  const glowScale = glow.interpolate({
+    inputRange: [0.6, 1],
+    outputRange: [1.05, 1.15],
+  });
 
   return (
     <View style={styles.orbContainer}>
-      <Animated.View style={[styles.orbGlow, isDay ? styles.sunGlow : styles.moonGlow, glowStyle]} />
-      <Animated.View style={[styles.orb, orbStyle]}>
+      <Animated.View
+        style={[
+          styles.orbGlow,
+          isDay ? styles.sunGlow : styles.moonGlow,
+          { opacity: glow, transform: [{ scale: glowScale }] },
+        ]}
+      />
+      <Animated.View
+        style={[
+          styles.orb,
+          { transform: [{ translateY }, { rotate: spinDeg }] },
+        ]}
+      >
         <Ionicons
           name={isDay ? "sunny" : "moon"}
           size={58}
@@ -156,28 +186,32 @@ function DriftingCloud({
   size,
   opacity,
 }: { delay: number; top: number; size: number; opacity: number }) {
-  const x = useSharedValue(-200);
   const W = Dimensions.get("window").width;
+  const x = useRef(new Animated.Value(-size)).current;
 
   useEffect(() => {
+    const duration = 40000 + delay * 1000;
     const run = () => {
-      x.value = -size;
-      x.value = withTiming(W + size, {
-        duration: 40000 + delay * 1000,
+      x.setValue(-size);
+      Animated.timing(x, {
+        toValue: W + size,
+        duration,
         easing: Easing.linear,
-      });
+        useNativeDriver: true,
+      }).start();
     };
     run();
-    const id = setInterval(run, 40000 + delay * 1000);
+    const id = setInterval(run, duration);
     return () => clearInterval(id);
   }, []);
 
-  const style = useAnimatedStyle(() => ({
-    transform: [{ translateX: x.value }],
-    opacity,
-  }));
   return (
-    <Animated.View style={[styles.cloud, { top, width: size, height: size * 0.45 }, style]} />
+    <Animated.View
+      style={[
+        styles.cloud,
+        { top, width: size, height: size * 0.45, opacity, transform: [{ translateX: x }] },
+      ]}
+    />
   );
 }
 
