@@ -52,11 +52,6 @@
     ],
     "experiments": {
       "typedRoutes": true
-    },
-    "locales": {
-      "he": {
-        "CFBundleDisplayName": "אילתוש"
-      }
     }
   }
 }
