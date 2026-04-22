@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "eilatush",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "primaryColor": "#14B8B3",
     "description": "אילתוש — האפליקציה המקומית של אילת. אירועים, עסקים, עבודות, חדשות, ועוזרת AI חכמה בלחיצת כפתור.",
     "ios": {
