@@ -1,5 +1,5 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -139,6 +139,32 @@ def _is_open_now(open_hours: str) -> bool:
 @api_router.get("/")
 async def root():
     return {"message": "Eilatush API – אילתוש"}
+
+
+@api_router.get("/privacy", response_class=HTMLResponse)
+async def privacy_policy():
+    """
+    Public privacy policy page for Google Play Store listing.
+    Required URL: https://eilat-connect.emergent.host/api/privacy
+    """
+    try:
+        policy_path = ROOT_DIR.parent / "frontend" / "assets" / "store" / "privacy-policy.html"
+        if policy_path.exists():
+            return HTMLResponse(content=policy_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        logger.error(f"Failed to load privacy policy file: {e}")
+
+    # Fallback inline minimal policy (used if file is missing)
+    return HTMLResponse(content="""<!DOCTYPE html><html lang="he" dir="rtl"><head>
+<meta charset="UTF-8"><title>מדיניות פרטיות – אילתוש</title></head>
+<body style="font-family:sans-serif;max-width:720px;margin:2rem auto;padding:1rem;line-height:1.6">
+<h1>מדיניות פרטיות – אילתוש</h1>
+<p>אילתוש לא אוספת מידע אישי. אין הרשמה, אין מעקב אחר משתמשים, אין גישה למצלמה/מיקום/אנשי קשר.
+הנתונים היחידים הנשמרים הם היסטוריית שיחה מקומית בלבד על המכשיר (AsyncStorage).
+האפליקציה מתחברת לשרתים שלנו בלבד כדי להציג חדשות, עסקים, עבודה ואירועים מקומיים,
+ולשירות Claude של Anthropic לצורך תשובות העוזרת החכמה.</p>
+<p>לשאלות: פנייה דרך כפתור WhatsApp באפליקציה.</p>
+<p>© אילתוש 2026</p></body></html>""")
 
 @api_router.get("/events")
 async def get_events(
