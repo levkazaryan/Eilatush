@@ -32,6 +32,21 @@ EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY')
 app = FastAPI(title="Eilatush API")
 api_router = APIRouter(prefix="/api")
 
+
+# ------------------- ROOT-LEVEL HEALTH PROBES -------------------
+# These endpoints live on the root `app` (NOT the /api router) so that
+# Kubernetes / Nginx liveness & readiness probes hitting "/health" and "/"
+# return 200 OK even before the DB connection is established. Critical for
+# Emergent's native deployment where K8s kills pods that fail health checks.
+@app.get("/health")
+async def _health_probe():
+    return {"status": "ok"}
+
+
+@app.get("/")
+async def _root_probe():
+    return {"status": "ok", "service": "eilatush-api"}
+
 # ------------------- MODELS -------------------
 
 class Event(BaseModel):
