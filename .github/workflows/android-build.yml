@@ -51,15 +51,32 @@ jobs:
       - name: Install dependencies
         run: yarn install
 
-      - name: Trigger EAS build (Android, production)
+      - name: Write Google Play service account JSON
+        env:
+          GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
+        run: |
+          if [ -z "$GOOGLE_SERVICE_ACCOUNT_KEY" ]; then
+            echo "::warning::GOOGLE_SERVICE_ACCOUNT_KEY secret is empty — auto-submit will be skipped"
+          else
+            printf '%s' "$GOOGLE_SERVICE_ACCOUNT_KEY" > google-play-service-account.json
+            echo "Service account file written ($(wc -c < google-play-service-account.json) bytes)"
+          fi
+
+      - name: Trigger EAS build (Android, production) + auto-submit
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           PROFILE="${{ github.event.inputs.profile || 'production' }}"
-          echo "Starting EAS build with profile: $PROFILE"
+          AUTO_SUBMIT_FLAG=""
+          if [ -f google-play-service-account.json ] && [ "$PROFILE" = "production" ]; then
+            AUTO_SUBMIT_FLAG="--auto-submit"
+            echo "Auto-submit enabled (track=internal)"
+          fi
+          echo "Starting EAS build with profile: $PROFILE $AUTO_SUBMIT_FLAG"
           eas build \
             --platform android \
             --profile "$PROFILE" \
+            $AUTO_SUBMIT_FLAG \
             --non-interactive \
             --no-wait
 

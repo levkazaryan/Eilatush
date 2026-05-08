@@ -1,12 +1,16 @@
 # 🚀 איך לשחרר גרסה חדשה של אילתוש
 
-## TL;DR — Push to main = New Build Automatically
+## TL;DR — Push to main = New Version on Play Store Automatically
 
-### האפשרות הקלה: דחיפה אוטומטית
-1. כל שינוי בקוד שאתה דוחף ל-`main` בענף בריפו GitHub יפעיל בנייה אוטומטית.
-2. בנייה רצה ב-Expo (~15-20 דקות).
-3. כשהיא מסתיימת תקבל מייל מ-Expo עם קישור הורדה ל-`.aab`.
-4. אתה מעלה את ה-`.aab` ל-Google Play Console (Internal Testing → Create release → Upload).
+### האפשרות הקלה: דחיפה אוטומטית (FULLY AUTOMATIC)
+1. כל שינוי בקוד שאתה דוחף ל-`main` בריפו GitHub יפעיל את התהליך הבא אוטומטית:
+   - ✅ GitHub Actions בונה את ה-`.aab` ב-EAS (~15-20 דק')
+   - ✅ Expo מעלה את ה-`.aab` ישירות ל-Play Console **Internal Testing** track
+   - ✅ Release נוצר אוטומטית כ-**Draft** (טיוטה) — אתה רק לוחץ "Publish" ב-Play Console
+2. אתה מקבל מייל מ-Expo כשה-build וה-submit הסתיימו.
+3. כנס ל-Play Console → Internal Testing → לחץ **Review release → Start rollout**.
+
+זהו! אין יותר העלאות ידניות.
 
 ### האפשרות הידנית: כפתור "Run workflow"
 אם רוצה לבנות בלי לדחוף קוד:
