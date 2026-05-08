@@ -96,7 +96,10 @@ async def scrape_cinema_eilat(client) -> List[EventDict]:
         results.append(
             pack(
                 source=_SRC,
-                ext_id=f"{today.isoformat()}-{t}",
+                # Stable ID — same movie title always maps to the same doc, so
+                # tomorrow's scrape upserts (replaces) today's record instead
+                # of accumulating per-day duplicates.
+                ext_id=f"movie-{t}",
                 title=f"🎬 {t}",
                 starts_at=start,
                 ends_at=start + timedelta(minutes=120),

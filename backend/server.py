@@ -1398,7 +1398,7 @@ async def _run_events_scrape() -> int:
         except Exception as e:
             logger.warning("events upsert failed for %s: %s", it.get("id"), e)
 
-    # Purge expired scraped events (older than 1 day ago) that weren't seen
+    # Purge expired scraped events (older than 2 days ago) that weren't seen
     # this run. Keeps the collection tidy.
     try:
         cutoff = datetime.now(timezone.utc) - timedelta(days=2)
@@ -1406,6 +1406,22 @@ async def _run_events_scrape() -> int:
             "source": {"$exists": True},
             "starts_at": {"$lt": cutoff},
         })
+    except Exception:
+        pass
+
+    # Purge stale "snapshot" sources (cinema_eilat) — these list TODAY's
+    # screenings only, so we delete any rows from this source whose ID is
+    # NOT in this scrape's results. Guarded by len(src_ids)>0 so a failed
+    # scrape never wipes the whole collection.
+    SNAPSHOT_SOURCES = ("cinema_eilat",)
+    try:
+        for src in SNAPSHOT_SOURCES:
+            src_ids = [it["id"] for it in items if it.get("source") == src]
+            if src_ids:
+                await db.events.delete_many({
+                    "source": src,
+                    "id": {"$nin": src_ids},
+                })
     except Exception:
         pass
 
