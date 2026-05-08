@@ -57,6 +57,47 @@ _STOP_WORDS_RE = re.compile(
 _NON_HEBREW_ALPHANUM = re.compile(r"[^\u0590-\u05ff\w\s]+", re.UNICODE)
 
 
+# ---------------------------------------------------------------------------
+# Eilat-only city filter
+# ---------------------------------------------------------------------------
+# Israeli cities that often produce false positives in jobs searches. If a job
+# title/description mentions one of these AND does not mention "אילת",
+# we treat it as out-of-area and drop it.
+_NON_EILAT_CITIES = [
+    "אופקים", "ערד", "באר שבע", "באר-שבע", "ב\"ש",
+    "דימונה", "ירוחם", "נתיבות", "רהט", "אופקים",
+    "אשקלון", "אשדוד", "מצפה רמון", "מצפה-רמון",
+    "ירושלים", "תל אביב", "תל-אביב", "ת\"א",
+    "חיפה", "רמת גן", "רמת-גן", "פתח תקווה", "פתח-תקווה",
+    "ראשון לציון", "ראשון-לציון", "חולון", "בת ים", "בת-ים",
+    "רחובות", "רעננה", "כפר סבא", "כפר-סבא", "הרצליה",
+    "נתניה", "נצרת", "עפולה", "טבריה", "צפת", "חדרה",
+    "אילון", "מודיעין", "בית שמש", "בית-שמש", "לוד",
+    "רמלה", "אריאל", "אילון", "כרמיאל",
+]
+_EILAT_RE = re.compile(r"אילת", re.UNICODE)
+
+
+def is_in_eilat(*texts: Optional[str]) -> bool:
+    """Return True if a job is plausibly in Eilat.
+
+    Logic:
+      • If any text mentions "אילת" → KEEP (True)
+      • Else if any text mentions a known non-Eilat city → DROP (False)
+      • Else (no city mentioned) → KEEP (True) — assume Eilat-scoped
+        because the source was already filtered by city in the URL.
+    """
+    blob = " ".join((t or "") for t in texts)
+    if not blob.strip():
+        return True
+    if _EILAT_RE.search(blob):
+        return True
+    for city in _NON_EILAT_CITIES:
+        if city in blob:
+            return False
+    return True
+
+
 def _normalize_for_fingerprint(s: str) -> str:
     """Normalize text for fuzzy matching across sources.
     - lowercase (for english parts)

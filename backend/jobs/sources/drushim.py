@@ -20,7 +20,7 @@ from urllib.parse import urljoin
 import httpx
 from bs4 import BeautifulSoup
 
-from ..base import _make_job, _strip, log
+from ..base import _make_job, _strip, log, is_in_eilat
 
 _BASE = "https://www.drushim.co.il"
 _SEARCH_URL = "https://www.drushim.co.il/jobs/search/%D7%90%D7%99%D7%9C%D7%AA/?ref=288"
@@ -182,6 +182,10 @@ def _extract_jobs_from_html(html: str) -> List[Dict[str, Any]]:
             job_type=parsed["job_type"],
             experience=parsed["experience"],
         )
+        # Eilat-only filter: drop jobs that clearly belong to another city.
+        if not is_in_eilat(title, company, description):
+            log.debug("drushim drop non-Eilat job: %s", title[:60])
+            continue
         results.append(job)
     return results
 
