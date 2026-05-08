@@ -147,7 +147,8 @@ export function TimeBandBadge({ band }: { band?: string }) {
 
 export function EventCard({ item }: { item: EventT }) {
   const vis = eventVisual(item);
-  const hasImage = !!item.image;
+  const [imageFailed, setImageFailed] = React.useState(false);
+  const hasImage = !!item.image && !imageFailed;
   const hasVenue = !!(item.venue && String(item.venue).trim().length);
   const hasDesc = !!(item.description && String(item.description).trim().length);
   const canOpen = !!item.link;
@@ -166,7 +167,11 @@ export function EventCard({ item }: { item: EventT }) {
     >
       {hasImage ? (
         <>
-          <Image source={{ uri: item.image! }} style={styles.eventImage} />
+          <Image
+            source={{ uri: item.image! }}
+            style={styles.eventImage}
+            onError={() => setImageFailed(true)}
+          />
           <View style={styles.eventImageOverlay} />
         </>
       ) : (
