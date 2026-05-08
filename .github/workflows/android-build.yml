@@ -1,0 +1,70 @@
+name: Android Production Build (EAS)
+
+on:
+  # Manual trigger from GitHub Actions UI
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "EAS build profile"
+        type: choice
+        default: production
+        options:
+          - production
+          - preview
+
+  # Auto-trigger on every push to main that touches the frontend / workflow
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/android-build.yml"
+
+concurrency:
+  group: eas-android-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: EAS Android Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Setup EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Trigger EAS build (Android, production)
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          PROFILE="${{ github.event.inputs.profile || 'production' }}"
+          echo "Starting EAS build with profile: $PROFILE"
+          eas build \
+            --platform android \
+            --profile "$PROFILE" \
+            --non-interactive \
+            --no-wait
+
+      - name: Print dashboard link
+        run: |
+          echo "::notice title=EAS Build Started::Check status at https://expo.dev/accounts/levkazaryan/projects/eilatush/builds"

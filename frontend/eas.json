@@ -16,6 +16,9 @@
     },
     "production": {
       "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://eilat-connect.emergent.host"
+      },
       "android": {
         "buildType": "app-bundle"
       }

@@ -53,7 +53,8 @@
           "backgroundColor": "#14B8B3"
         }
       ],
-      "./plugins/withDisableAndroidLintChecks"
+      "./plugins/withDisableAndroidLintChecks",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
