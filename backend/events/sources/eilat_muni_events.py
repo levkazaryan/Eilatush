@@ -38,6 +38,37 @@ def _parse_dt(txt: str) -> Optional[datetime]:
         return None
 
 
+async def _fetch_og_image(client, url: str) -> Optional[str]:
+    """Fetch a page and return the value of <meta property='og:image'>."""
+    try:
+        r = await client.get(url, headers=HEADERS, timeout=TIMEOUT, follow_redirects=True)
+    except Exception:
+        return None
+    if r.status_code != 200:
+        return None
+    soup = BeautifulSoup(r.text, "html.parser")
+    for prop in ("og:image", "og:image:secure_url", "twitter:image"):
+        m = soup.find("meta", attrs={"property": prop}) or soup.find(
+            "meta", attrs={"name": prop}
+        )
+        if m and m.get("content"):
+            url = m["content"].strip()
+            if url.startswith("//"):
+                url = "https:" + url
+            return url
+    # Fallback: first <img> on the page that's not a logo
+    for img in soup.find_all("img"):
+        src = img.get("data-src") or img.get("src") or ""
+        if not src or "logo" in src.lower():
+            continue
+        if not re.search(r"\.(jpe?g|png|webp)", src, re.IGNORECASE):
+            continue
+        if src.startswith("//"):
+            src = "https:" + src
+        return src
+    return None
+
+
 async def scrape_eilat_muni_events(client) -> List[EventDict]:
     try:
         r = await client.get(URL, headers=HEADERS, timeout=TIMEOUT, follow_redirects=False)
@@ -72,6 +103,8 @@ async def scrape_eilat_muni_events(client) -> List[EventDict]:
         if len(title) < 4:
             continue
         link = href if href.startswith("http") else "https://www.eilat.muni.il" + href.lstrip(".")
+        # Enrich with og:image from the event detail page (best-effort).
+        image = await _fetch_og_image(client, link)
         results.append(
             pack(
                 source=_SRC,
@@ -79,8 +112,13 @@ async def scrape_eilat_muni_events(client) -> List[EventDict]:
                 title=title,
                 starts_at=dt,
                 venue=venue,
+                image=image,
                 link=link,
             )
         )
-    log.info("eilat_muni → %d events", len(results))
+    log.info(
+        "eilat_muni → %d events (%d with image)",
+        len(results),
+        sum(1 for e in results if e.get("image")),
+    )
     return results

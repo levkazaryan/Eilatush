@@ -33,7 +33,46 @@ async def scrape_cinema_eilat(client) -> List[EventDict]:
     today = datetime.now(IST).date()
     venue = "קולנוע אילת"
 
-    # Gather movie titles from H2/H3 headings that look like film names
+    # ---- Step 1: Build a {movie_title: poster_url} map ---------------------
+    # Find every <img> with a poster-looking URL and walk up to find its
+    # nearest <h1>/<h2>/<h3> heading. Skip the site logo.
+    title_to_image: dict[str, str] = {}
+    for img in soup.find_all("img"):
+        src = (
+            img.get("data-src")
+            or img.get("src")
+            or (img.get("srcset", "").split(" ") or [""])[0]
+        )
+        if not src:
+            continue
+        if "logo" in src.lower() or "לוגו" in src:
+            continue
+        if not re.search(r"\.(jpe?g|png|webp)", src, re.IGNORECASE):
+            continue
+        if src.startswith("//"):
+            src = "https:" + src
+
+        # Walk up parents and look for a nearby heading
+        node = img
+        heading_text: str | None = None
+        for _ in range(6):
+            if not node:
+                break
+            h = node.find(["h1", "h2", "h3"]) if hasattr(node, "find") else None
+            if h:
+                heading_text = h.get_text(strip=True)
+                break
+            nxt = node.find_next_sibling() if hasattr(node, "find_next_sibling") else None
+            if nxt:
+                h2 = nxt.find(["h1", "h2", "h3"]) if hasattr(nxt, "find") else None
+                if h2:
+                    heading_text = h2.get_text(strip=True)
+                    break
+            node = node.parent
+        if heading_text and heading_text not in title_to_image:
+            title_to_image[heading_text] = src
+
+    # ---- Step 2: Iterate movie headings and emit events -------------------
     headings = soup.find_all(["h1", "h2", "h3"])
     seen_titles: set[str] = set()
     for h in headings:
@@ -49,19 +88,7 @@ async def scrape_cinema_eilat(client) -> List[EventDict]:
             continue
         seen_titles.add(t)
 
-        # try to find a nearby poster image
-        image = None
-        parent = h.find_parent()
-        if parent:
-            img_el = parent.find("img")
-            if img_el:
-                image = (
-                    img_el.get("data-src")
-                    or img_el.get("src")
-                    or (img_el.get("srcset", "").split(" ") or [""])[0]
-                )
-                if image and image.startswith("//"):
-                    image = "https:" + image
+        image = title_to_image.get(t)
 
         # Default showing time: today 20:00 IST (placeholder — site doesn't
         # publish per-movie times in the HTML)
@@ -80,5 +107,9 @@ async def scrape_cinema_eilat(client) -> List[EventDict]:
                 tags=["cinema"],
             )
         )
-    log.info("cinema-eilat → %d events", len(results))
+    log.info(
+        "cinema-eilat → %d events (%d with poster)",
+        len(results),
+        sum(1 for e in results if e.get("image")),
+    )
     return results
