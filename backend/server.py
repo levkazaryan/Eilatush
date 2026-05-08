@@ -507,6 +507,28 @@ async def refresh_jobs_now():
     return {"fetched": count}
 
 
+@api_router.post("/jobs/purge-non-eilat")
+async def purge_non_eilat_jobs():
+    """Admin: walk through all jobs in DB and DELETE any whose title /
+    company / description clearly belong to a non-Eilat city. Lightweight
+    (no scrape, runs in ~1 sec) — used to clean up stale records when the
+    scrape filter is too slow to run via Cloudflare."""
+    from jobs.base import is_in_eilat
+    deleted = 0
+    examined = 0
+    examples: list[str] = []
+    async for j in db.jobs.find({}, {"_id": 0}):
+        examined += 1
+        if not is_in_eilat(
+            j.get("title"), j.get("company"), j.get("description")
+        ):
+            await db.jobs.delete_one({"id": j["id"]})
+            deleted += 1
+            if len(examples) < 5:
+                examples.append((j.get("title") or "")[:60])
+    return {"examined": examined, "deleted": deleted, "examples": examples}
+
+
 @api_router.get("/jobs/{job_id}")
 async def get_job(job_id: str):
     doc = await db.jobs.find_one({"id": job_id}, {"_id": 0})

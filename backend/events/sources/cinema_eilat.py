@@ -79,8 +79,15 @@ async def scrape_cinema_eilat(client) -> List[EventDict]:
         t = h.get_text(strip=True)
         if not t or len(t) < 2 or len(t) > 80:
             continue
-        # filter non-movie headings
-        if any(bad in t for bad in ["פרטי", "תפריט", "צור קשר", "הזמנ", "אודות", "עקבו", "ליצירת"]):
+        # filter non-movie headings (navigation / contact / social / marketing)
+        if any(
+            bad in t
+            for bad in [
+                "פרטי", "תפריט", "צור קשר", "הזמנ", "אודות", "עקבו",
+                "ליצירת", "פנו אלינו", "ברשתות", "החברתיות",
+                "עכשיו ב", "מבצע", "שעות פתיחה",
+            ]
+        ):
             continue
         if ":" in t or "@" in t:
             continue
@@ -89,6 +96,13 @@ async def scrape_cinema_eilat(client) -> List[EventDict]:
         seen_titles.add(t)
 
         image = title_to_image.get(t)
+
+        # 🎯 Strict mode: only emit events that have a matched poster image.
+        # This eliminates non-movie headings that slipped past the keyword
+        # filter (they typically have no associated image) → 100% photo
+        # coverage in the app feed.
+        if not image:
+            continue
 
         # Default showing time: today 20:00 IST (placeholder — site doesn't
         # publish per-movie times in the HTML)
