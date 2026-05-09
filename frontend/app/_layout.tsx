@@ -5,6 +5,7 @@ import { Stack } from "expo-router";
 import { I18nManager, LogBox, Platform } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { COLORS } from "../theme";
+import { trackAppOpen } from "../utils/analytics";
 
 // Silence noisy dev-only warnings that overlay the UI in Expo Go
 LogBox.ignoreLogs([
@@ -34,6 +35,8 @@ export default function RootLayout() {
       document.documentElement.setAttribute("lang", "he");
       document.body.style.backgroundColor = COLORS.bg;
     }
+    // Track app open (analytics)
+    trackAppOpen();
   }, []);
 
   return (

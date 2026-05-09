@@ -526,6 +526,51 @@ async def refresh_jobs_now():
     return {"fetched": count}
 
 
+# ------------------- ANALYTICS -------------------
+class TrackEventRequest(BaseModel):
+    user_id: str
+    event: str
+    props: Optional[Dict[str, Any]] = None
+
+
+@api_router.post("/track")
+async def track_event(body: TrackEventRequest):
+    """Anonymous user analytics ingest. Called by the mobile app on every
+    significant interaction (tab views, business clicks, phone clicks, etc.).
+    """
+    import analytics
+    await analytics.track(db, body.user_id, body.event, body.props or {})
+    return {"ok": True}
+
+
+@api_router.get("/admin/report.pdf")
+async def admin_report_pdf(period: str = "30d", token: str = ""):
+    """Returns a branded Hebrew PDF analytics report.
+
+    Auth: requires the admin token (same as chat password). Returns 403 if
+    the token doesn't match. Used as a download link from the admin chat flow.
+    """
+    from admin_chat import ADMIN_PASSWORD, PERIOD_LABELS
+    import analytics
+    from pdf_report import generate_report_pdf
+    from fastapi.responses import Response
+
+    if (token or "").strip().lower() != ADMIN_PASSWORD:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Invalid admin token.")
+
+    data = await analytics.full_report(db, period=period)
+    pdf_bytes = generate_report_pdf(
+        data, period_label=PERIOD_LABELS.get(period, period)
+    )
+    filename = f"eilatush-report-{period}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
 @api_router.post("/jobs/purge-non-eilat")
 async def purge_non_eilat_jobs():
     """Admin: walk through all jobs in DB and DELETE any whose title /
@@ -916,6 +961,39 @@ def _default_followups(intent: str) -> List[str]:
 async def eilatush_chat(body: ChatRequest):
     session_id = body.session_id or str(uuid.uuid4())
     user_msg = body.message
+
+    # ---------- ANALYTICS: log user question (truncated) ----------
+    try:
+        import analytics
+        # Use session_id as a soft user id for now (real user_id comes from
+        # the /api/track endpoint when frontend sends it).
+        await analytics.track(
+            db, session_id, "ai_message",
+            {"text": (user_msg or "")[:200]}
+        )
+    except Exception:
+        pass
+
+    # ---------- ADMIN MODE INTERCEPT ----------
+    # If the message is part of an admin flow (trigger / password / question
+    # while authenticated), handle it here BEFORE the normal classifier.
+    # See `admin_chat.py` for the flow logic.
+    try:
+        from admin_chat import handle_admin_turn
+        admin_resp = await handle_admin_turn(db, session_id, user_msg)
+        if admin_resp is not None:
+            return {
+                "session_id": session_id,
+                "reply": admin_resp["reply"],
+                "intent": "admin",
+                "results": [],
+                "follow_ups": admin_resp.get("follow_ups") or [],
+                "weather": None,
+                "admin": admin_resp.get("admin_payload"),
+            }
+    except Exception as _e:
+        log.warning("admin chat failed: %s", _e)
+
     parsed = await _llm_classify(user_msg, session_id)
     intent = parsed.get("intent", "general")
     filters = parsed.get("filters") or {}

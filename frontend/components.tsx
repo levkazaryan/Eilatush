@@ -3,6 +3,17 @@ import { View, Text, StyleSheet, Image, TouchableOpacity, Pressable, Linking } f
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS, RADIUS, SPACING } from "./theme";
 import { openWhatsApp, openPhone, openLink, formatHebrewTime, formatJobPosted } from "./api";
+import {
+  trackEventOutbound,
+  trackBusinessView,
+  trackBusinessPhone,
+  trackBusinessWebsite,
+  trackJobView,
+  trackJobOutbound,
+  trackNewsView,
+  trackNewsOutbound,
+  trackEventView,
+} from "./utils/analytics";
 
 export type EventT = {
   id: string;
@@ -153,7 +164,10 @@ export function EventCard({ item }: { item: EventT }) {
   const hasDesc = !!(item.description && String(item.description).trim().length);
   const canOpen = !!item.link;
   const handleOpen = () => {
-    if (item.link) openLink(item.link);
+    if (item.link) {
+      trackEventOutbound(item.id);
+      openLink(item.link);
+    }
   };
   return (
     <Pressable
