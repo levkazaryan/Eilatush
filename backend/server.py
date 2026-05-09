@@ -205,6 +205,25 @@ async def get_events(
             }
         except Exception:
             pass
+    else:
+        # Default ("All" tab) — hide events that already ended.
+        # An event is considered "ended" if:
+        #   • end_at exists AND end_at < now, OR
+        #   • starts_at is before TODAY (Israeli local day start)
+        # Events starting today (or in the future) stay visible all day even
+        # without an explicit end_at, so users can still browse "today's"
+        # things until midnight Asia/Jerusalem.
+        from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+        ist = _tz(_td(hours=2))
+        now_utc = _dt.now(_tz.utc)
+        today_start_utc = _dt.now(ist).replace(hour=0, minute=0, second=0, microsecond=0).astimezone(_tz.utc)
+        q["$or"] = [
+            # Events with explicit end_at: still upcoming if end_at >= now
+            {"end_at": {"$gte": now_utc}},
+            # Events without end_at: still upcoming if starts_at >= today start
+            {"end_at": None, "starts_at": {"$gte": today_start_utc}},
+            {"end_at": {"$exists": False}, "starts_at": {"$gte": today_start_utc}},
+        ]
     docs = await db.events.find(q, {"_id": 0}).to_list(limit)
     # sort by start time (earliest first)
     docs.sort(key=lambda d: d.get("starts_at") or datetime.now(timezone.utc))
