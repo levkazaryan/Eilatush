@@ -599,6 +599,101 @@ async def purge_non_eilat_jobs():
     return {"examined": examined, "deleted": deleted, "examples": examples}
 
 
+# ---------------------------------------------------------------------------
+# App version / Update prompt
+# ---------------------------------------------------------------------------
+# A single MongoDB doc tracks the latest published Android version so that
+# the mobile app can prompt users to update on launch.
+#
+#   collection: app_config
+#   doc:        { _id: "android_version", latest_version, min_required_version,
+#                 message, play_store_url, force, updated_at }
+#
+# The admin endpoint POST /api/admin/version is called automatically by the
+# GitHub Actions CI pipeline after a successful EAS submit, so the version
+# stays in sync with what's actually live on Google Play.
+PLAY_STORE_URL_DEFAULT = "https://play.google.com/store/apps/details?id=app.eilatush"
+DEFAULT_UPDATE_MESSAGE = "יש גרסה חדשה של אילתוש! עדכן/י עכשיו כדי ליהנות מתכונות חדשות 🐬"
+
+
+def _parse_version(v: Optional[str]) -> tuple[int, ...]:
+    """Parse "1.2.3" into (1, 2, 3). Missing parts default to 0."""
+    if not v:
+        return (0, 0, 0)
+    parts = []
+    for p in str(v).strip().split("."):
+        try:
+            parts.append(int(p))
+        except ValueError:
+            parts.append(0)
+    while len(parts) < 3:
+        parts.append(0)
+    return tuple(parts[:3])
+
+
+@api_router.get("/app-version")
+async def get_app_version():
+    """Public — read by the mobile app on every launch."""
+    doc = await db.app_config.find_one({"_id": "android_version"}, {"_id": 0})
+    if not doc:
+        # Sensible defaults if nothing has been set yet
+        doc = {
+            "latest_version": "1.0.0",
+            "min_required_version": "1.0.0",
+            "message": DEFAULT_UPDATE_MESSAGE,
+            "play_store_url": PLAY_STORE_URL_DEFAULT,
+            "force": False,
+        }
+    return doc
+
+
+class _VersionUpdateBody(BaseModel):
+    password: str
+    latest_version: str
+    min_required_version: Optional[str] = None
+    message: Optional[str] = None
+    play_store_url: Optional[str] = None
+    force: Optional[bool] = None
+
+
+@api_router.post("/admin/version")
+async def admin_set_version(body: _VersionUpdateBody):
+    """Admin — called by CI after a successful Play Store submit, or manually
+    via curl. Protected by the same admin password used for the AI chatbot."""
+    from admin_chat import ADMIN_PASSWORD
+    if body.password.strip().lower() != ADMIN_PASSWORD:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    update: Dict[str, Any] = {
+        "latest_version": body.latest_version.strip(),
+        "updated_at": datetime.now(timezone.utc),
+    }
+    if body.min_required_version is not None:
+        update["min_required_version"] = body.min_required_version.strip()
+    if body.message is not None:
+        update["message"] = body.message
+    if body.play_store_url is not None:
+        update["play_store_url"] = body.play_store_url
+    if body.force is not None:
+        update["force"] = bool(body.force)
+
+    # First write — set sensible defaults for any field the caller didn't pass
+    existing = await db.app_config.find_one({"_id": "android_version"}, {"_id": 0})
+    if not existing:
+        update.setdefault("min_required_version", body.latest_version.strip())
+        update.setdefault("message", DEFAULT_UPDATE_MESSAGE)
+        update.setdefault("play_store_url", PLAY_STORE_URL_DEFAULT)
+        update.setdefault("force", False)
+
+    await db.app_config.update_one(
+        {"_id": "android_version"},
+        {"$set": update},
+        upsert=True,
+    )
+    saved = await db.app_config.find_one({"_id": "android_version"}, {"_id": 0})
+    return {"status": "ok", "config": saved}
+
+
 @api_router.get("/jobs/{job_id}")
 async def get_job(job_id: str):
     doc = await db.jobs.find_one({"id": job_id}, {"_id": 0})

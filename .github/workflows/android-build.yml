@@ -83,3 +83,34 @@ jobs:
       - name: Print dashboard link
         run: |
           echo "::notice title=EAS Build Started::Check status at https://expo.dev/accounts/levkazaryan/projects/eilatush/builds"
+
+      - name: Notify backend of new app version
+        # Reads `version` from app.json and POSTs it to /api/admin/version so
+        # the in-app "update available" prompt knows the new latest version.
+        # The build is `--no-wait`, but updating the version flag immediately
+        # is fine — users only get the prompt once they actually have the new
+        # APK on their device, and the modal compares against this number.
+        env:
+          BACKEND_URL: ${{ secrets.EILATUSH_BACKEND_URL }}
+          ADMIN_PASSWORD: ${{ secrets.EILATUSH_ADMIN_PASSWORD }}
+        run: |
+          if [ -z "$BACKEND_URL" ] || [ -z "$ADMIN_PASSWORD" ]; then
+            echo "::warning::EILATUSH_BACKEND_URL or EILATUSH_ADMIN_PASSWORD secret missing — skipping version notify"
+            exit 0
+          fi
+          VERSION=$(node -p "require('./app.json').expo.version")
+          echo "Notifying backend of new latest version: $VERSION"
+          # Build the JSON body with jq to safely escape the password
+          BODY=$(jq -nc \
+            --arg pw "$ADMIN_PASSWORD" \
+            --arg v  "$VERSION" \
+            '{password:$pw, latest_version:$v, force:false}')
+          HTTP_CODE=$(curl -sS -o /tmp/version_resp.json -w "%{http_code}" \
+            -X POST "$BACKEND_URL/api/admin/version" \
+            -H "Content-Type: application/json" \
+            -d "$BODY" || echo "000")
+          echo "Backend response ($HTTP_CODE):"
+          cat /tmp/version_resp.json || true
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::warning::Version notify failed with HTTP $HTTP_CODE"
+          fi

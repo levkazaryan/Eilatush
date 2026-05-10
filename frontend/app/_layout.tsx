@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Stack } from "expo-router";
 import { I18nManager, LogBox, Platform } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { COLORS } from "../theme";
 import { trackAppOpen } from "../utils/analytics";
+import { checkForUpdate, type UpdateDecision } from "../utils/version-check";
+import UpdateModal from "../components/UpdateModal";
 
 // Silence noisy dev-only warnings that overlay the UI in Expo Go
 LogBox.ignoreLogs([
@@ -29,6 +31,8 @@ if (Platform.OS !== "web") {
 }
 
 export default function RootLayout() {
+  const [updateDecision, setUpdateDecision] = useState<UpdateDecision>({ kind: "none" });
+
   useEffect(() => {
     if (Platform.OS === "web" && typeof document !== "undefined") {
       document.documentElement.setAttribute("dir", "rtl");
@@ -37,6 +41,22 @@ export default function RootLayout() {
     }
     // Track app open (analytics)
     trackAppOpen();
+
+    // Check for app update — non-blocking, runs in background.
+    // If a newer version is available we surface a friendly modal.
+    let cancelled = false;
+    (async () => {
+      try {
+        const decision = await checkForUpdate();
+        if (!cancelled) setUpdateDecision(decision);
+      } catch (e) {
+        // Silent — never block the app for update-check failures
+        console.warn("update check failed", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
@@ -47,6 +67,10 @@ export default function RootLayout() {
           headerShown: false,
           contentStyle: { backgroundColor: COLORS.bg },
         }}
+      />
+      <UpdateModal
+        decision={updateDecision}
+        onDismiss={() => setUpdateDecision({ kind: "none" })}
       />
     </>
   );
