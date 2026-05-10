@@ -58,63 +58,44 @@ _NON_HEBREW_ALPHANUM = re.compile(r"[^\u0590-\u05ff\w\s]+", re.UNICODE)
 
 
 # ---------------------------------------------------------------------------
-# Eilat-only city filter
+# Eilat-only city filter (STRICT WHITELIST)
 # ---------------------------------------------------------------------------
-# Israeli cities that often produce false positives in jobs searches. If a job
-# title/description mentions one of these AND does not mention "אילת",
-# we treat it as out-of-area and drop it.
-_NON_EILAT_CITIES = [
-    # South & Negev
-    "אופקים", "ערד", "באר שבע", "באר-שבע", "ב\"ש",
-    "דימונה", "ירוחם", "נתיבות", "רהט", "אופקים",
-    "אשקלון", "אשדוד", "מצפה רמון", "מצפה-רמון",
-    "קרית גת", "קרית-גת", "ק\"ג", "כרמי גת", "כרמי-גת",
-    "שדרות", "אופקים", "להבים", "מיתר", "עומר",
-    # Center
-    "ירושלים", "מעלה אדומים", "בית שמש", "בית-שמש", "מודיעין",
-    "תל אביב", "תל-אביב", "ת\"א", "תל אביב-יפו", "יפו",
-    "רמת גן", "רמת-גן", "פתח תקווה", "פתח-תקווה", "פ\"ת",
-    "ראשון לציון", "ראשון-לציון", "חולון", "בת ים", "בת-ים",
-    "רחובות", "רעננה", "כפר סבא", "כפר-סבא", "הרצליה",
-    "נתניה", "חדרה", "לוד", "רמלה", "אריאל",
-    "בני ברק", "בני-ברק", "גבעתיים", "כפר יונה",
-    "ראש העין", "ראש-העין", "הוד השרון", "הוד-השרון",
-    # North
-    "חיפה", "כרמיאל", "נצרת", "נצרת עילית", "עפולה",
-    "טבריה", "צפת", "קרית שמונה", "קרית-שמונה",
-    "עכו", "מעלות", "כרמיאל", "מגדל העמק", "מגדל-העמק",
-    "טירת כרמל", "טירת-כרמל", "קרית מוצקין", "קרית-מוצקין",
-    "קרית ים", "קרית-ים", "קרית ביאליק", "קרית-ביאליק",
-    "קרית אתא", "קרית-אתא", "נשר", "יקנעם",
-    "נהריה", "כרמיאל", "מעלות תרשיחא", "מעלות-תרשיחא",
-    "סחנין", "טמרה", "באקה", "אום אל פחם", "אום-אל-פחם",
-    # West Bank settlements
-    "אריאל", "אפרת", "מעלה אדומים", "ביתר עילית",
-    # "Country-wide" job postings that aren't local to Eilat
-    "ברחבי הארץ", "ארצי", "כל הארץ", "מספר אזורים", "אזור עובדה",
-    "כלל ארצי", "כלל-ארצי", "ברחבי ישראל",
-]
+# A job is kept only if it explicitly mentions "אילת" (the city) somewhere
+# in its title / company / description / location.  Anything else is dropped.
+# This catches every Israeli city outside Eilat without needing to maintain a
+# blacklist of every town in the country.
+#
+# We accept the city in any common Hebrew form:
+#   "אילת"  (bare)
+#   "באילת" (in Eilat)
+#   "לאילת" (to Eilat)
+#   "מאילת" (from Eilat)
+#   "אילתי" (Eilat-resident, adjective)
+#   "ואילת" (and Eilat — when listing multiple)
+#
+# Substring match on "אילת" covers all the above. The only common false-positive
+# Hebrew word containing this substring is "אילתור" (improvisation), which we
+# explicitly exclude below.
 _EILAT_RE = re.compile(r"אילת", re.UNICODE)
+_FALSE_POSITIVE_RE = re.compile(r"אילתור|אילתורי|אילתורים", re.UNICODE)
 
 
 def is_in_eilat(*texts: Optional[str]) -> bool:
-    """Return True if a job is plausibly in Eilat.
+    """Return True ONLY if the job explicitly mentions Eilat.
 
-    Logic:
-      • If any text mentions "אילת" → KEEP (True)
-      • Else if any text mentions a known non-Eilat city → DROP (False)
-      • Else (no city mentioned) → KEEP (True) — assume Eilat-scoped
-        because the source was already filtered by city in the URL.
+    Strict whitelist — drop everything that doesn't say "אילת" somewhere.
+    This is the safest behaviour for a city-specific app: better to miss a
+    legit Eilat job (rare, since real postings always say "אילת") than to
+    show a job from Tel Aviv / Jerusalem / anywhere else.
     """
-    blob = " ".join((t or "") for t in texts)
-    if not blob.strip():
-        return True
-    if _EILAT_RE.search(blob):
-        return True
-    for city in _NON_EILAT_CITIES:
-        if city in blob:
-            return False
-    return True
+    blob = " ".join((t or "") for t in texts).strip()
+    if not blob:
+        return False
+    if not _EILAT_RE.search(blob):
+        return False
+    # Strip false-positive matches ("אילתור" = improvisation) and re-check.
+    cleaned = _FALSE_POSITIVE_RE.sub(" ", blob)
+    return bool(_EILAT_RE.search(cleaned))
 
 
 def _normalize_for_fingerprint(s: str) -> str:

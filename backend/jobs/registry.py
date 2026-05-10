@@ -5,7 +5,7 @@ from typing import Any, Dict, List
 
 import httpx
 
-from .base import HEADERS, TIMEOUT, log
+from .base import HEADERS, TIMEOUT, log, is_in_eilat
 from .sources import (
     scrape_eilatjobs,
     scrape_jobmaster,
@@ -64,7 +64,14 @@ def dedupe_jobs(jobs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 async def run_all_job_scrapers() -> List[Dict[str, Any]]:
-    """Run all registered job scrapers and return de-duplicated jobs list."""
+    """Run all registered job scrapers and return de-duplicated jobs list.
+
+    Applies a STRICT Eilat-only whitelist filter at the very end:
+    any job whose title / company / description does not explicitly mention
+    "אילת" is dropped here, regardless of which source it came from.  This
+    guarantees no Tel Aviv / Jerusalem / Ofakim / etc. job ever reaches the
+    DB, even if a per-source filter is added later or fails.
+    """
     all_jobs: List[Dict[str, Any]] = []
     async with httpx.AsyncClient(headers=HEADERS, timeout=TIMEOUT) as client:
         for name, fn, _prio in SCRAPERS:
@@ -74,6 +81,16 @@ async def run_all_job_scrapers() -> List[Dict[str, Any]]:
                 all_jobs.extend(items)
             except Exception as e:
                 log.exception("job-scraper %s failed: %s", name, e)
+
+    # Strict Eilat-only filter — drop anything that doesn't say "אילת"
+    before = len(all_jobs)
+    all_jobs = [
+        j for j in all_jobs
+        if is_in_eilat(j.get("title"), j.get("company"), j.get("description"))
+    ]
+    log.info("jobs eilat-only filter: %d → %d (dropped %d non-Eilat)",
+             before, len(all_jobs), before - len(all_jobs))
+
     deduped = dedupe_jobs(all_jobs)
     log.info("jobs dedupe: %d → %d", len(all_jobs), len(deduped))
     return deduped

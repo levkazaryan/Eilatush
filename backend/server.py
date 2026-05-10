@@ -583,13 +583,19 @@ async def purge_non_eilat_jobs():
     examples: list[str] = []
     async for j in db.jobs.find({}, {"_id": 0}):
         examined += 1
+        # NOTE: do NOT pass `location` here — scrapers default it to "אילת"
+        # for every record, which would make the filter a no-op.  We rely on
+        # the title / company / description to detect the real city.
         if not is_in_eilat(
             j.get("title"), j.get("company"), j.get("description")
         ):
             await db.jobs.delete_one({"id": j["id"]})
             deleted += 1
-            if len(examples) < 5:
-                examples.append((j.get("title") or "")[:60])
+            if len(examples) < 10:
+                examples.append({
+                    "title": (j.get("title") or "")[:80],
+                    "location": (j.get("location") or "")[:60],
+                })
     return {"examined": examined, "deleted": deleted, "examples": examples}
 
 
