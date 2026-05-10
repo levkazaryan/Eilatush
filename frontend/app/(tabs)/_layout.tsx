@@ -115,14 +115,14 @@ const styles = StyleSheet.create({
   centerItem: {
     alignItems: "center",
     justifyContent: "center",
-    marginTop: -16,
+    marginTop: -24,
     minWidth: 80,   // ensure label never wraps regardless of parent width
   },
   centerLabel: {
-    // Pull the label up closer to the mascot — the mascot image has
-    // significant transparent padding at the bottom, so we negate it here
-    // instead of cropping the asset.
-    marginTop: -12,
+    // The new bubble mascot fills its canvas, so we push the label DOWN
+    // (instead of negative margin) to keep clear separation between the
+    // bubble and the "אילתוש" text.
+    marginTop: 2,
     paddingHorizontal: 4,
     includeFontPadding: false as any,
   },
