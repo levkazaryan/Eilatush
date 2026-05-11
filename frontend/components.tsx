@@ -140,6 +140,119 @@ const sourceLabel: Record<string, string> = {
   event: "אירוע",
 };
 
+// ---------------------------------------------------------------------------
+// Source attribution — required by Google Play policy for apps that display
+// governmental information.  Every event / business / news / job card must
+// clearly show *where the data came from* and let the user open the original
+// source page in their browser.
+// ---------------------------------------------------------------------------
+type SourceMeta = {
+  /** Friendly Hebrew label shown to the user. */
+  label: string;
+  /** Homepage of the source, used as a fallback when no item-specific URL exists. */
+  homepage?: string;
+  /** Is this a government (.gov.il / municipal) source? Renders a 🏛️ icon. */
+  isGov?: boolean;
+};
+
+export const SOURCE_INFO: Record<string, SourceMeta> = {
+  // ── Government / Municipal (.gov.il / .muni.il) ─────────────────────────
+  eilat_muni: { label: "עיריית אילת", homepage: "https://www.eilat.muni.il", isGov: true },
+  eilat_city: { label: "אילת סיטי", homepage: "https://www.eilat.city" },
+
+  // ── News ─────────────────────────────────────────────────────────────────
+  ynet:           { label: "ynet",           homepage: "https://www.ynet.co.il" },
+  israelhayom:    { label: "ישראל היום",      homepage: "https://www.israelhayom.co.il" },
+  mako:           { label: "mako",            homepage: "https://www.mako.co.il" },
+  walla:          { label: "Walla",           homepage: "https://www.walla.co.il" },
+  n12:            { label: "N12",             homepage: "https://www.n12.co.il" },
+  haaretz:        { label: "הארץ",            homepage: "https://www.haaretz.co.il" },
+  globes:         { label: "Globes",          homepage: "https://www.globes.co.il" },
+  calcalist:      { label: "כלכליסט",         homepage: "https://www.calcalist.co.il" },
+  themarker:      { label: "TheMarker",       homepage: "https://www.themarker.com" },
+
+  // ── Tickets / Events ─────────────────────────────────────────────────────
+  cinema_eilat:   { label: "סינמה אילת",     homepage: "https://www.cinema-eilat.com" },
+  tickchak:       { label: "Tickchak",        homepage: "https://www.tickchak.co.il" },
+  smarticket:     { label: "Smarticket",      homepage: "https://www.smarticket.co.il" },
+
+  // ── Jobs ─────────────────────────────────────────────────────────────────
+  drushim:        { label: "דרושים.co.il",   homepage: "https://www.drushim.co.il" },
+  jobmaster:      { label: "JobMaster",       homepage: "https://www.jobmaster.co.il" },
+  yomyom:         { label: "יום-יום",         homepage: "https://www.yomyom.co.il" },
+  eilatjobs:      { label: "EilatJobs",       homepage: "https://www.eilatjobs.co.il" },
+
+  // ── Professionals ────────────────────────────────────────────────────────
+  yomyom_pros:    { label: "יום-יום מקצועיים", homepage: "https://www.yomyom.co.il" },
+};
+
+/** Resolve the best-available source metadata for any record. */
+export function resolveSource(item: { source?: string | null; source_name?: string | null; source_url?: string | null; link?: string | null; website?: string | null }):
+  { label: string; url: string | null; isGov: boolean } {
+  const slug = (item.source || "").toLowerCase();
+  const meta = SOURCE_INFO[slug];
+  return {
+    label: item.source_name || meta?.label || slug || "מקור חיצוני",
+    url: item.source_url || item.link || item.website || meta?.homepage || null,
+    isGov: !!meta?.isGov,
+  };
+}
+
+/** Inline tappable "מקור: ..." badge — shown on EVERY card to satisfy Google
+ * Play's source-attribution policy and to build user trust. */
+export function SourceAttributionBadge({
+  source,
+  source_name,
+  source_url,
+  link,
+  website,
+  size = "sm",
+  testID,
+}: {
+  source?: string | null;
+  source_name?: string | null;
+  source_url?: string | null;
+  link?: string | null;
+  website?: string | null;
+  size?: "sm" | "md";
+  testID?: string;
+}) {
+  const { label, url, isGov } = resolveSource({ source, source_name, source_url, link, website });
+  const handlePress = (e: any) => {
+    e?.stopPropagation?.();
+    if (url) openLink(url);
+  };
+  const small = size === "sm";
+  return (
+    <Pressable
+      onPress={handlePress}
+      disabled={!url}
+      style={[
+        styles.sourceAttrBadge,
+        small ? styles.sourceAttrBadgeSm : styles.sourceAttrBadgeMd,
+        isGov && styles.sourceAttrBadgeGov,
+      ]}
+      testID={testID}
+      android_ripple={url ? { color: "rgba(0,0,0,0.04)" } : undefined}
+    >
+      {isGov ? (
+        <Text style={[styles.sourceAttrEmoji, small && { fontSize: 11 }]}>🏛️</Text>
+      ) : null}
+      <Text style={[styles.sourceAttrLabel, small && styles.sourceAttrLabelSm, isGov && styles.sourceAttrLabelGov]} numberOfLines={1}>
+        מקור: {label}
+      </Text>
+      {url ? (
+        <Ionicons
+          name="open-outline"
+          size={small ? 10 : 12}
+          color={isGov ? COLORS.secondary : COLORS.textMuted}
+          style={{ marginStart: 3 }}
+        />
+      ) : null}
+    </Pressable>
+  );
+}
+
 export function TimeBandBadge({ band }: { band?: string }) {
   if (!band) return null;
   const map: Record<string, { text: string; color: string; bg: string }> = {
@@ -203,6 +316,15 @@ export function EventCard({ item }: { item: EventT }) {
         <Text style={styles.eventTitle} numberOfLines={2}>
           {item.title}
         </Text>
+        {/* Source attribution — required by Google Play policy for gov info */}
+        <View style={{ marginBottom: 6, alignSelf: "flex-start", flexDirection: "row" }}>
+          <SourceAttributionBadge
+            source={item.source}
+            link={item.link}
+            size="sm"
+            testID={`event-source-${item.id}`}
+          />
+        </View>
         <View style={styles.metaRow}>
           <Ionicons name="time-outline" size={14} color={COLORS.textSecondary} />
           <Text style={styles.metaText}>{formatHebrewTime(item.starts_at)}</Text>
@@ -391,6 +513,18 @@ export function BusinessCard({ item, onPress }: { item: BusinessT; onPress?: () 
             </Text>
           </View>
         ) : null}
+        {/* Source attribution — required by Google Play policy. Especially
+            important for `eilat_muni` records (municipal data → .gov.il). */}
+        <View style={{ marginTop: 6, alignSelf: "flex-start", flexDirection: "row" }}>
+          <SourceAttributionBadge
+            source={item.source}
+            source_name={item.source_name}
+            source_url={item.source_url}
+            website={item.website}
+            size="sm"
+            testID={`business-source-${item.id}`}
+          />
+        </View>
         <View style={styles.actionsRow}>
           <View style={{ flex: 1 }} />
           {item.phone ? (
@@ -998,6 +1132,46 @@ const styles = StyleSheet.create({
     maxWidth: "70%",
   },
   sourceText: { fontSize: 11, fontWeight: "900", letterSpacing: 0.4 },
+
+  // ---- Source attribution badge (Google Play policy) ----------------------
+  sourceAttrBadge: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.08)",
+    borderRadius: RADIUS.pill,
+    maxWidth: "100%",
+  },
+  sourceAttrBadgeSm: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  sourceAttrBadgeMd: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  sourceAttrBadgeGov: {
+    // Distinct teal tint for government / .gov.il sources, per policy
+    backgroundColor: "rgba(20,184,179,0.10)",
+    borderColor: "rgba(20,184,179,0.40)",
+  },
+  sourceAttrEmoji: {
+    fontSize: 12,
+    marginEnd: 4,
+  },
+  sourceAttrLabel: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontWeight: "700",
+    textAlign: "right",
+  },
+  sourceAttrLabelSm: {
+    fontSize: 11,
+  },
+  sourceAttrLabelGov: {
+    color: COLORS.secondary,
+  },
   newsDate: { color: COLORS.textMuted, fontSize: 11 },
   newsTitle: { color: COLORS.textPrimary, fontSize: 16, fontWeight: "900", textAlign: "right", writingDirection: "rtl" },
   newsSummary: { color: COLORS.textSecondary, fontSize: 13, marginTop: 6, lineHeight: 20, textAlign: "right", writingDirection: "rtl" },

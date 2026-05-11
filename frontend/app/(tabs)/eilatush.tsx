@@ -20,6 +20,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { router } from "expo-router";
 import { api } from "../../api";
 import { COLORS, RADIUS, SPACING } from "../../theme";
 import { EventCard, BusinessCard, JobCard, NewsCard } from "../../components";
@@ -301,6 +302,17 @@ export default function EilatushScreen() {
                 testID="header-invite"
               >
                 <Ionicons name="share-social-outline" size={20} color={COLORS.primary} />
+              </Pressable>
+              <Pressable
+                onPress={() => router.push("/sources")}
+                style={({ pressed }) => [
+                  styles.headerIconBtn,
+                  pressed && { opacity: 0.6 },
+                ]}
+                accessibilityLabel="מקורות מידע"
+                testID="header-sources"
+              >
+                <Ionicons name="information-circle-outline" size={20} color={COLORS.primary} />
               </Pressable>
               <Pressable
                 onPress={openWhatsApp}
