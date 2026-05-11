@@ -24,7 +24,9 @@ export type UpdateDecision =
   | { kind: "soft"; config: RemoteVersionConfig; current: string }
   | { kind: "force"; config: RemoteVersionConfig; current: string };
 
-const API_BASE = process.env.EXPO_PUBLIC_BACKEND_URL ?? "";
+const FALLBACK_API = "https://eilat-connect.emergent.host";
+const API_BASE: string =
+  (process.env.EXPO_PUBLIC_BACKEND_URL || "").trim() || FALLBACK_API;
 
 /** "1.2.3" → [1, 2, 3]; missing parts default to 0; non-numeric → 0. */
 function parseVersion(v: string | null | undefined): number[] {

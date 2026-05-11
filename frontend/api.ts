@@ -1,7 +1,18 @@
 import { Linking, Platform } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 
-const API = process.env.EXPO_PUBLIC_BACKEND_URL;
+// Resolve the backend URL with a hard-coded fallback.
+//
+// Why the fallback?  EAS build env-vars can silently fail to inject for a
+// number of reasons (cached builds, wrong eas-cli version, profile mix-ups).
+// If `EXPO_PUBLIC_BACKEND_URL` ever ends up undefined or empty, EVERY API call
+// would go to `undefined/api/...` and the app would look broken (empty lists
+// on every tab) — even though the backend is perfectly healthy.
+//
+// Production deployment URL is fixed for this app, so we use it as a safe
+// default. The env var still wins when set — useful for dev / preview builds.
+const FALLBACK_API = "https://eilat-connect.emergent.host";
+const API: string = (process.env.EXPO_PUBLIC_BACKEND_URL || "").trim() || FALLBACK_API;
 
 export const api = {
   base: API,
