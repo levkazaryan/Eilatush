@@ -1320,102 +1320,43 @@ async def on_startup():
     except Exception:
         pass
     # start scheduler + kick off first scrape in background.
-    # Skip startup-scrape for a collection if it already has fresh data — but
-    # ALWAYS scrape on startup when the existing data is stale (older than the
-    # configured TTL).  This is critical on Kubernetes: pods get restarted
-    # frequently, and APScheduler's cron triggers can be missed if the pod
-    # isn't alive at the exact trigger minute.  The staleness check guarantees
-    # we always have fresh data at most `stale_after_hours` old, no matter how
-    # often the pod is restarted.
+    # Skip startup-scrape if a collection already has data — the scheduler
+    # will refresh it on its own interval.  Long-running scrapes (Playwright,
+    # LLM tagging) run only in the background scheduler, never on startup,
+    # to avoid OOM-killing the pod during cold start.
     _start_scheduler()
     import asyncio
 
-    async def _maybe_run(
-        count_fn,
-        runner,
-        min_count: int,
-        label: str,
-        last_updated_field: Optional[str] = None,
-        collection_name: Optional[str] = None,
-        stale_after_hours: int = 24,
-    ) -> None:
+    async def _maybe_run(count_fn, runner, min_count: int, label: str) -> None:
         try:
             c = await count_fn()
         except Exception:
             c = 0
-        # Check staleness even when count is high.
-        if c >= min_count and last_updated_field and collection_name:
-            try:
-                latest = await db[collection_name].find_one(
-                    {last_updated_field: {"$exists": True}},
-                    sort=[(last_updated_field, -1)],
-                    projection={last_updated_field: 1, "_id": 0},
-                )
-                last = latest.get(last_updated_field) if latest else None
-                if last:
-                    # Mongo stores naive UTC datetimes — coerce to aware for safe compare
-                    if last.tzinfo is None:
-                        last = last.replace(tzinfo=timezone.utc)
-                    age_hours = (datetime.now(timezone.utc) - last).total_seconds() / 3600
-                    if age_hours < stale_after_hours:
-                        logger.info(
-                            "startup skip %s scrape (have %d rows, last update %.1fh ago)",
-                            label, c, age_hours,
-                        )
-                        return
-                    logger.info(
-                        "startup %s scrape: data is %.1fh old (>%dh threshold) — refreshing",
-                        label, age_hours, stale_after_hours,
-                    )
-                else:
-                    logger.info(
-                        "startup %s scrape: no last-update timestamp found — refreshing",
-                        label,
-                    )
-            except Exception as e:
-                logger.warning("staleness check failed for %s: %s", label, e)
-                # Fall through to original count-only behaviour
-                logger.info("startup skip %s scrape (have %d rows)", label, c)
-                return
-        elif c >= min_count:
+        if c >= min_count:
             logger.info("startup skip %s scrape (have %d rows)", label, c)
             return
         await runner()
 
     asyncio.create_task(
-        _maybe_run(
-            lambda: db.news.count_documents({}),
-            _run_scrape_job, 30, "news",
-            last_updated_field="fetched_at",
-            collection_name="news",
-            stale_after_hours=6,
-        )
+        _maybe_run(lambda: db.news.count_documents({}), _run_scrape_job, 30, "news")
     )
     asyncio.create_task(
-        _maybe_run(
-            lambda: db.jobs.count_documents({}),
-            _run_jobs_scrape, 20, "jobs",
-            last_updated_field="fetched_at",
-            collection_name="jobs",
-            stale_after_hours=24,
-        )
+        _maybe_run(lambda: db.jobs.count_documents({}), _run_jobs_scrape, 20, "jobs")
     )
     asyncio.create_task(
         _maybe_run(
             lambda: db.businesses.count_documents({}),
-            _run_businesses_scrape, 500, "businesses",
-            last_updated_field="fetched_at",
-            collection_name="businesses",
-            stale_after_hours=24 * 7,
+            _run_businesses_scrape,
+            500,
+            "businesses",
         )
     )
     asyncio.create_task(
         _maybe_run(
             lambda: db.events.count_documents({"source": {"$exists": True}}),
-            _run_events_scrape, 20, "events",
-            last_updated_field="fetched_at",
-            collection_name="events",
-            stale_after_hours=24,
+            _run_events_scrape,
+            20,
+            "events",
         )
     )
 
