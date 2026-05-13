@@ -24,7 +24,7 @@ import {
   openWaze,
   displayPhone,
 } from "../../api";
-import { BusinessT, BIZ_CATEGORY } from "../../components";
+import { BusinessT, BIZ_CATEGORY, SourceAttributionBadge } from "../../components";
 import { COLORS, RADIUS, SPACING } from "../../theme";
 
 export default function BusinessDetail() {
@@ -224,14 +224,18 @@ export default function BusinessDetail() {
             </View>
           ) : null}
 
-          {/* Source footer */}
+          {/* Source footer — uses the same SourceAttributionBadge component
+              for consistency with the cards, so government (.gov.il / .muni.il)
+              sources get a 🏛️ icon + teal background per Google Play policy. */}
           <View style={styles.sourceBox}>
-            <Text style={styles.sourceText}>מקור: {item.source_name || item.source}</Text>
-            {item.source_url ? (
-              <Pressable onPress={() => openLink(item.source_url || undefined)}>
-                <Text style={styles.sourceLinkText}>פתח במקור ↗</Text>
-              </Pressable>
-            ) : null}
+            <SourceAttributionBadge
+              source={item.source}
+              source_name={item.source_name}
+              source_url={item.source_url}
+              website={item.website || undefined}
+              size="md"
+              testID="business-detail-source"
+            />
           </View>
         </View>
       </ScrollView>
