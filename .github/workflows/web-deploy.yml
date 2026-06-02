@@ -53,18 +53,18 @@ jobs:
           echo "Total files: $(find dist -type f | wc -l)"
           echo "Total size:  $(du -sh dist | cut -f1)"
 
-      - name: Deploy to Hostinger via FTP
+      - name: Deploy to Hostinger via FTPS
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.HOSTINGER_FTP_HOST }}
           username: ${{ secrets.HOSTINGER_FTP_USERNAME }}
           password: ${{ secrets.HOSTINGER_FTP_PASSWORD }}
           port: 21
-          protocol: ftp
+          protocol: ftps
           local-dir: ./frontend/dist/
           server-dir: ${{ secrets.HOSTINGER_FTP_REMOTE_PATH }}
-          # Clean state on every deploy — files removed locally get removed remotely too.
-          # Keeps these manually-managed files on the server safe:
+          # Hostinger uses FTPS explicit on port 21 — plain FTP is blocked.
+          # Files removed locally get removed remotely too. These remote files are safe:
           exclude: |
             **/.git*
             **/.git*/**
@@ -72,10 +72,10 @@ jobs:
             **/.DS_Store
             .ftpquota
             .htaccess.bak
-          # Verbose logs help diagnose first-time setup issues
           log-level: standard
-          # Don't fail loudly if a transient file lock happens on Hostinger
           dangerous-clean-slate: false
+          # SSL setting needed for many shared hosting setups (self-signed/intermediate certs)
+          security: loose
 
       - name: Done
         run: |
