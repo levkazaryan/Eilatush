@@ -8,6 +8,7 @@ import { COLORS } from "../theme";
 import { trackAppOpen } from "../utils/analytics";
 import { checkForUpdate, type UpdateDecision } from "../utils/version-check";
 import UpdateModal from "../components/UpdateModal";
+import PWAInstallBanner from "../components/PWAInstallBanner";
 
 // Silence noisy dev-only warnings that overlay the UI in Expo Go
 LogBox.ignoreLogs([
@@ -72,6 +73,8 @@ export default function RootLayout() {
         decision={updateDecision}
         onDismiss={() => setUpdateDecision({ kind: "none" })}
       />
+      {/* PWA install banner — auto-hides on native, only renders on web */}
+      <PWAInstallBanner />
     </>
   );
 }
