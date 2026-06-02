@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet, Image, TouchableOpacity, Pressable, Linking } from "react-native";
+import { View, Text, StyleSheet, Image, TouchableOpacity, Pressable, Linking, Modal } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS, RADIUS, SPACING } from "./theme";
 import { openWhatsApp, openPhone, openLink, formatHebrewTime, formatJobPosted } from "./api";
@@ -28,6 +28,13 @@ export type EventT = {
   phone?: string;
   link?: string | null;
   source?: string | null;
+  /** Populated by the backend when this event was merged from multiple sources. */
+  sources?: Array<{
+    source?: string | null;
+    source_name?: string | null;
+    source_url?: string | null;
+    link?: string | null;
+  }> | null;
   tags?: string[];
   band?: "now" | "tonight" | "later";
 };
@@ -199,13 +206,19 @@ export function resolveSource(item: { source?: string | null; source_name?: stri
 }
 
 /** Inline tappable "מקור: ..." badge — shown on EVERY card to satisfy Google
- * Play's source-attribution policy and to build user trust. */
+ * Play's source-attribution policy and to build user trust.
+ *
+ * When the underlying record was merged from multiple sources (events scraped
+ * from several platforms), pass `sources` and the badge will show "X מקורות"
+ * and, on tap, open the SourcesBottomSheet to list all of them.
+ */
 export function SourceAttributionBadge({
   source,
   source_name,
   source_url,
   link,
   website,
+  sources,
   size = "sm",
   testID,
 }: {
@@ -214,42 +227,166 @@ export function SourceAttributionBadge({
   source_url?: string | null;
   link?: string | null;
   website?: string | null;
+  sources?: Array<{ source?: string | null; source_name?: string | null; source_url?: string | null; link?: string | null }> | null;
   size?: "sm" | "md";
   testID?: string;
 }) {
-  const { label, url, isGov } = resolveSource({ source, source_name, source_url, link, website });
+  const [sheetOpen, setSheetOpen] = React.useState(false);
+  const merged = Array.isArray(sources) && sources.length > 1;
+
+  // Is ANY source in the list a government source?  Influences badge styling.
+  const govInMerged = merged
+    ? sources!.some((s) => resolveSource(s || {}).isGov)
+    : false;
+
+  const single = resolveSource({ source, source_name, source_url, link, website });
+  const isGov = merged ? govInMerged : single.isGov;
+  const small = size === "sm";
+
+  // Label text
+  const label = merged
+    ? `${sources!.length} מקורות${govInMerged ? "" : ""}`
+    : `מקור: ${single.label}`;
+
+  // Tap action
   const handlePress = (e: any) => {
     e?.stopPropagation?.();
-    if (url) openLink(url);
+    if (merged) {
+      setSheetOpen(true);
+    } else if (single.url) {
+      openLink(single.url);
+    }
   };
-  const small = size === "sm";
+
+  const hasAction = merged || !!single.url;
+
   return (
-    <Pressable
-      onPress={handlePress}
-      disabled={!url}
-      style={[
-        styles.sourceAttrBadge,
-        small ? styles.sourceAttrBadgeSm : styles.sourceAttrBadgeMd,
-        isGov && styles.sourceAttrBadgeGov,
-      ]}
-      testID={testID}
-      android_ripple={url ? { color: "rgba(0,0,0,0.04)" } : undefined}
-    >
-      {isGov ? (
-        <Text style={[styles.sourceAttrEmoji, small && { fontSize: 11 }]}>🏛️</Text>
-      ) : null}
-      <Text style={[styles.sourceAttrLabel, small && styles.sourceAttrLabelSm, isGov && styles.sourceAttrLabelGov]} numberOfLines={1}>
-        מקור: {label}
-      </Text>
-      {url ? (
-        <Ionicons
-          name="open-outline"
-          size={small ? 10 : 12}
-          color={isGov ? COLORS.secondary : COLORS.textMuted}
-          style={{ marginStart: 3 }}
+    <>
+      <Pressable
+        onPress={handlePress}
+        disabled={!hasAction}
+        style={[
+          styles.sourceAttrBadge,
+          small ? styles.sourceAttrBadgeSm : styles.sourceAttrBadgeMd,
+          isGov && styles.sourceAttrBadgeGov,
+        ]}
+        testID={testID}
+        android_ripple={hasAction ? { color: "rgba(0,0,0,0.04)" } : undefined}
+      >
+        {isGov ? (
+          <Text style={[styles.sourceAttrEmoji, small && { fontSize: 11 }]}>🏛️</Text>
+        ) : null}
+        <Text
+          style={[
+            styles.sourceAttrLabel,
+            small && styles.sourceAttrLabelSm,
+            isGov && styles.sourceAttrLabelGov,
+          ]}
+          numberOfLines={1}
+        >
+          {label}
+        </Text>
+        {hasAction ? (
+          <Ionicons
+            name={merged ? "list" : "open-outline"}
+            size={small ? 10 : 12}
+            color={isGov ? COLORS.secondary : COLORS.textMuted}
+            style={{ marginStart: 3 }}
+          />
+        ) : null}
+      </Pressable>
+      {merged ? (
+        <SourcesBottomSheet
+          visible={sheetOpen}
+          sources={sources!}
+          onClose={() => setSheetOpen(false)}
         />
       ) : null}
-    </Pressable>
+    </>
+  );
+}
+
+
+/** Bottom-sheet modal listing every source for a merged event.  Tapping any
+ * row opens that source in the browser. */
+function SourcesBottomSheet({
+  visible,
+  sources,
+  onClose,
+}: {
+  visible: boolean;
+  sources: Array<{ source?: string | null; source_name?: string | null; source_url?: string | null; link?: string | null }>;
+  onClose: () => void;
+}) {
+  // Sort: government first, then by source slug
+  const sorted = React.useMemo(() => {
+    return [...sources].sort((a, b) => {
+      const ga = resolveSource(a || {}).isGov ? 0 : 1;
+      const gb = resolveSource(b || {}).isGov ? 0 : 1;
+      if (ga !== gb) return ga - gb;
+      return (a.source || "").localeCompare(b.source || "");
+    });
+  }, [sources]);
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      <Pressable style={styles.sheetBackdrop} onPress={onClose}>
+        <Pressable style={styles.sheetCard} onPress={(e) => e.stopPropagation()}>
+          <View style={styles.sheetHandle} />
+          <Text style={styles.sheetTitle}>אירוע זה פורסם ב-{sources.length} מקורות</Text>
+          <Text style={styles.sheetSubtitle}>לחיצה על כל מקור פותחת אותו באתר המקורי</Text>
+          {sorted.map((s, idx) => {
+            const meta = resolveSource(s || {});
+            return (
+              <Pressable
+                key={(s.source || "") + idx}
+                onPress={() => {
+                  if (meta.url) openLink(meta.url);
+                }}
+                style={({ pressed }) => [
+                  styles.sheetRow,
+                  meta.isGov && styles.sheetRowGov,
+                  pressed && { opacity: 0.6 },
+                ]}
+                android_ripple={{ color: "rgba(0,0,0,0.06)" }}
+                disabled={!meta.url}
+              >
+                {meta.isGov ? (
+                  <Text style={styles.sheetEmoji}>🏛️</Text>
+                ) : (
+                  <Ionicons name="link" size={18} color={COLORS.textMuted} style={{ marginEnd: 8 }} />
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[styles.sheetRowLabel, meta.isGov && styles.sheetRowLabelGov]}
+                    numberOfLines={1}
+                  >
+                    {meta.label}
+                  </Text>
+                  {meta.url ? (
+                    <Text style={styles.sheetRowUrl} numberOfLines={1}>
+                      {meta.url}
+                    </Text>
+                  ) : null}
+                </View>
+                {meta.url ? (
+                  <Ionicons name="open-outline" size={18} color={COLORS.textMuted} />
+                ) : null}
+              </Pressable>
+            );
+          })}
+          <Pressable onPress={onClose} style={styles.sheetClose}>
+            <Text style={styles.sheetCloseText}>סגירה</Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -316,11 +453,14 @@ export function EventCard({ item }: { item: EventT }) {
         <Text style={styles.eventTitle} numberOfLines={2}>
           {item.title}
         </Text>
-        {/* Source attribution — required by Google Play policy for gov info */}
+        {/* Source attribution — required by Google Play policy for gov info.
+            When the event was merged from multiple sources (via AI dedup),
+            the badge becomes "X מקורות" and tap opens a bottom sheet. */}
         <View style={{ marginBottom: 6, alignSelf: "flex-start", flexDirection: "row" }}>
           <SourceAttributionBadge
             source={item.source}
             link={item.link}
+            sources={item.sources}
             size="sm"
             testID={`event-source-${item.id}`}
           />
@@ -1171,6 +1311,92 @@ const styles = StyleSheet.create({
   },
   sourceAttrLabelGov: {
     color: COLORS.secondary,
+  },
+
+  // ── Bottom sheet (multi-source modal) ──────────────────────────────────
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+  },
+  sheetCard: {
+    backgroundColor: COLORS.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: 10,
+    paddingBottom: SPACING.lg + 8,
+    maxHeight: "80%",
+  },
+  sheetHandle: {
+    width: 44,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "rgba(0,0,0,0.18)",
+    alignSelf: "center",
+    marginBottom: SPACING.md,
+  },
+  sheetTitle: {
+    fontSize: 17,
+    fontWeight: "900",
+    color: COLORS.textPrimary,
+    marginBottom: 4,
+    textAlign: "right",
+    writingDirection: "rtl",
+  },
+  sheetSubtitle: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginBottom: SPACING.md,
+    textAlign: "right",
+    writingDirection: "rtl",
+  },
+  sheetRow: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.025)",
+    borderRadius: RADIUS.md,
+    padding: SPACING.sm + 2,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.06)",
+  },
+  sheetRowGov: {
+    backgroundColor: "rgba(20,184,179,0.10)",
+    borderColor: "rgba(20,184,179,0.40)",
+  },
+  sheetEmoji: {
+    fontSize: 20,
+    marginEnd: 8,
+  },
+  sheetRowLabel: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: COLORS.textPrimary,
+    textAlign: "right",
+    writingDirection: "rtl",
+  },
+  sheetRowLabelGov: {
+    color: COLORS.secondary,
+  },
+  sheetRowUrl: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    marginTop: 2,
+    textAlign: "right",
+    writingDirection: "rtl",
+  },
+  sheetClose: {
+    marginTop: 6,
+    backgroundColor: "rgba(0,0,0,0.04)",
+    borderRadius: RADIUS.md,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  sheetCloseText: {
+    color: COLORS.textSecondary,
+    fontWeight: "800",
+    fontSize: 14,
   },
   newsDate: { color: COLORS.textMuted, fontSize: 11 },
   newsTitle: { color: COLORS.textPrimary, fontSize: 16, fontWeight: "900", textAlign: "right", writingDirection: "rtl" },

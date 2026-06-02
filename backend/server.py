@@ -1279,6 +1279,21 @@ async def seed_data():
 
 app.include_router(api_router)
 
+
+# ---------------------------------------------------------------------------
+# Admin: trigger event dedup on demand (idempotent, safe to call anytime)
+# ---------------------------------------------------------------------------
+@app.post("/api/events/dedup")
+async def admin_dedup_events():
+    """Re-run the AI-powered event de-duplicator across the future events.
+
+    Idempotent — running it twice in a row produces no further changes.
+    Useful right after deploying the feature for the first time, or any time
+    you suspect duplicates have crept back in.
+    """
+    from events.dedup import dedup_future_events
+    return await dedup_future_events(db)
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
@@ -1678,6 +1693,18 @@ async def _run_events_scrape() -> int:
                     pass
     except Exception as e:
         logger.exception("events auto-tag failed (non-fatal): %s", e)
+
+    # ── AI-powered deduplication ────────────────────────────────────────
+    # After all events are upserted + tagged, run Claude-powered dedup so that
+    # the same show published to multiple platforms (Smarticket + Tickchak +
+    # eilat_muni etc.) appears as ONE merged event with a `sources: [...]`
+    # array.  This is a no-op if there are no duplicates.
+    try:
+        from events.dedup import dedup_future_events
+        stats = await dedup_future_events(db)
+        logger.info("events dedup: %s", stats)
+    except Exception as e:  # noqa: BLE001
+        logger.exception("events dedup failed (non-fatal): %s", e)
 
     logger.info("events scrape job done: %d upserted", count)
     return count
