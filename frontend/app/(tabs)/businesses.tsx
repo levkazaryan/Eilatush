@@ -19,6 +19,7 @@ import { useRouter } from "expo-router";
 import { api } from "../../api";
 import { COLORS, RADIUS, SPACING } from "../../theme";
 import { BusinessCard, BusinessT, EmptyState } from "../../components";
+import { trackScreen } from "../../utils/analytics";
 
 type BizCategory = { slug: string; label: string; emoji: string; count: number };
 type BizType = "business" | "professional";
@@ -75,6 +76,7 @@ export default function BusinessesScreen() {
   }, [type, JSON.stringify(category), openNow, debouncedQuery]);
 
   useEffect(() => {
+    trackScreen("businesses");
     loadMeta();
   }, [loadMeta]);
 

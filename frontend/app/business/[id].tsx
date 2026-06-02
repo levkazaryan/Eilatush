@@ -26,6 +26,12 @@ import {
 } from "../../api";
 import { BusinessT, BIZ_CATEGORY, SourceAttributionBadge } from "../../components";
 import { COLORS, RADIUS, SPACING } from "../../theme";
+import {
+  trackBusinessView,
+  trackBusinessPhone,
+  trackBusinessDirections,
+  trackBusinessWebsite,
+} from "../../utils/analytics";
 
 export default function BusinessDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -39,6 +45,9 @@ export default function BusinessDetail() {
       try {
         const d = await api.business(String(id));
         setItem(d);
+        if (d && d.id) {
+          trackBusinessView(d.id, d.name);
+        }
       } catch (e) {
         console.warn("load business", e);
       } finally {
@@ -161,7 +170,10 @@ export default function BusinessDetail() {
           {item.address ? (
             <Pressable
               style={styles.infoCard}
-              onPress={() => openWaze(`${item.name} ${item.address}`)}
+              onPress={() => {
+                trackBusinessDirections(item.id);
+                openWaze(`${item.name} ${item.address}`);
+              }}
             >
               <Ionicons name="location" size={18} color={COLORS.primary} />
               <View style={{ flex: 1 }}>
@@ -177,7 +189,13 @@ export default function BusinessDetail() {
 
           {/* Phone */}
           {item.phone ? (
-            <Pressable style={styles.infoCard} onPress={() => openPhone(item.phone || undefined)}>
+            <Pressable
+              style={styles.infoCard}
+              onPress={() => {
+                trackBusinessPhone(item.id);
+                openPhone(item.phone || undefined);
+              }}
+            >
               <Ionicons name="call" size={18} color={COLORS.success} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.infoLabel}>טלפון</Text>
@@ -204,7 +222,13 @@ export default function BusinessDetail() {
 
           {/* Website */}
           {item.website ? (
-            <Pressable style={styles.infoCard} onPress={() => openLink(item.website || undefined)}>
+            <Pressable
+              style={styles.infoCard}
+              onPress={() => {
+                trackBusinessWebsite(item.id);
+                openLink(item.website || undefined);
+              }}
+            >
               <Ionicons name="globe-outline" size={18} color={COLORS.primary} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.infoLabel}>אתר</Text>
@@ -260,7 +284,10 @@ export default function BusinessDetail() {
           {item.phone ? (
             <TouchableOpacity
               style={[styles.stickyBtn, { backgroundColor: COLORS.success }]}
-              onPress={() => openPhone(item.phone || undefined)}
+              onPress={() => {
+                trackBusinessPhone(item.id);
+                openPhone(item.phone || undefined);
+              }}
             >
               <Ionicons name="call" size={18} color="#fff" />
               <Text style={styles.stickyBtnText}>חייג/י</Text>

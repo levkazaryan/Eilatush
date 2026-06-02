@@ -3,17 +3,7 @@ import { View, Text, StyleSheet, Image, TouchableOpacity, Pressable, Linking, Mo
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS, RADIUS, SPACING } from "./theme";
 import { openWhatsApp, openPhone, openLink, formatHebrewTime, formatJobPosted } from "./api";
-import {
-  trackEventOutbound,
-  trackBusinessView,
-  trackBusinessPhone,
-  trackBusinessWebsite,
-  trackJobView,
-  trackJobOutbound,
-  trackNewsView,
-  trackNewsOutbound,
-  trackEventView,
-} from "./utils/analytics";
+import { trackEventOutbound, trackBusinessPhone } from "./utils/analytics";
 
 export type EventT = {
   id: string;
@@ -670,7 +660,11 @@ export function BusinessCard({ item, onPress }: { item: BusinessT; onPress?: () 
           {item.phone ? (
             <TouchableOpacity
               style={[styles.iconBtn, { backgroundColor: COLORS.success }]}
-              onPress={(e) => { e.stopPropagation(); openPhone(item.phone || undefined); }}
+              onPress={(e) => {
+                e.stopPropagation();
+                trackBusinessPhone(item.id);
+                openPhone(item.phone || undefined);
+              }}
               testID={`business-call-${item.id}`}
             >
               <Ionicons name="call" size={16} color="#fff" />

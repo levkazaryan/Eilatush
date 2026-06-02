@@ -17,6 +17,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { openLink, formatHebrewTime } from "../../api";
 import { COLORS, RADIUS, SPACING } from "../../theme";
+import { trackNewsView, trackNewsOutbound } from "../../utils/analytics";
 
 // Source names whose main content is a video — for these articles we embed
 // the source page inline (WebView on native, iframe on web) so the user can
@@ -119,6 +120,9 @@ export default function ArticleScreen() {
         if (r.ok) {
           const d = await r.json();
           setArticle(d);
+          if (d && d.id) {
+            trackNewsView(d.id, d.title);
+          }
         }
       } catch (e) {
         console.warn("load article", e);
@@ -189,7 +193,12 @@ export default function ArticleScreen() {
             {article.source_name ? (
               <TouchableOpacity
                 style={styles.sourcePill}
-                onPress={() => article.source_url && openLink(article.source_url)}
+                onPress={() => {
+                  if (article.source_url) {
+                    trackNewsOutbound(article.id);
+                    openLink(article.source_url);
+                  }
+                }}
                 testID="article-source-pill"
               >
                 <Ionicons name="open-outline" size={12} color={COLORS.accent} style={{ marginEnd: 4 }} />
@@ -210,7 +219,12 @@ export default function ArticleScreen() {
 
             <TouchableOpacity
               style={styles.readAtSource}
-              onPress={() => article.source_url && openLink(article.source_url)}
+              onPress={() => {
+                if (article.source_url) {
+                  trackNewsOutbound(article.id);
+                  openLink(article.source_url);
+                }
+              }}
               testID="article-read-at-source"
             >
               <Ionicons

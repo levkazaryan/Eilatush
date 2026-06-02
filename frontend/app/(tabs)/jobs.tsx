@@ -18,6 +18,7 @@ import { useRouter } from "expo-router";
 import { api } from "../../api";
 import { COLORS, RADIUS, SPACING } from "../../theme";
 import { JobCard, JobT, EmptyState } from "../../components";
+import { trackScreen } from "../../utils/analytics";
 
 type JobCategory = { slug: string; label: string; emoji: string; count: number };
 type JobSource = { source: string; source_name: string; count: number };
@@ -103,6 +104,7 @@ export default function JobsScreen() {
   }, [JSON.stringify(category), dateRange, JSON.stringify(jobType), JSON.stringify(experience), JSON.stringify(source)]);
 
   useEffect(() => {
+    trackScreen("jobs");
     loadMeta();
   }, [loadMeta]);
 

@@ -16,6 +16,7 @@ import { api } from "../../api";
 import { COLORS, RADIUS, SPACING } from "../../theme";
 import { EventCard, EventT, SectionHeader, FilterChip, EmptyState } from "../../components";
 import { WeatherHero } from "../../components/WeatherHero";
+import { trackScreen } from "../../utils/analytics";
 
 const BANDS: { key: "all" | "now" | "tonight" | "later"; label: string }[] = [
   { key: "all", label: "הכל" },
@@ -63,6 +64,10 @@ export default function HomeScreen() {
       setRefreshing(false);
     }
   }, [category, selectedDate]);
+
+  useEffect(() => {
+    trackScreen("home");
+  }, []);
 
   useEffect(() => {
     setLoading(true);

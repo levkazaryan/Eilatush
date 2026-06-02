@@ -7,6 +7,7 @@ import { useRouter } from "expo-router";
 import { api, openLink } from "../../api";
 import { COLORS, SPACING } from "../../theme";
 import { NewsCard, NewsT, FilterChip, EmptyState } from "../../components";
+import { trackScreen, trackNewsOutbound } from "../../utils/analytics";
 
 type SourceOption = { source_name: string; count: number };
 type CategoryOption = { slug: string; label: string; emoji: string; count: number };
@@ -71,6 +72,7 @@ export default function NewsScreen() {
   }, [category, sourceName]);
 
   useEffect(() => {
+    trackScreen("news");
     loadMeta();
   }, [loadMeta]);
 
@@ -162,7 +164,12 @@ export default function NewsScreen() {
               key={n.id}
               item={n}
               onPress={() => router.push(`/article/${n.id}`)}
-              onSourcePress={() => n.source_url && openLink(n.source_url)}
+              onSourcePress={() => {
+                if (n.source_url) {
+                  trackNewsOutbound(n.id);
+                  openLink(n.source_url);
+                }
+              }}
             />
           ))
         )}

@@ -26,6 +26,7 @@ import {
 } from "../../api";
 import { JobT } from "../../components";
 import { COLORS, RADIUS, SPACING } from "../../theme";
+import { trackJobView, trackJobOutbound } from "../../utils/analytics";
 
 const jobTypeLabel: Record<string, string> = {
   full_time: "משרה מלאה",
@@ -70,7 +71,12 @@ export default function JobDetailScreen() {
     (async () => {
       try {
         const data = await api.job(String(id));
-        if (alive) setJob(data);
+        if (alive) {
+          setJob(data);
+          if (data && data.id) {
+            trackJobView(data.id, data.title);
+          }
+        }
       } catch (e: any) {
         if (alive) setError(e?.message || "שגיאה בטעינת המשרה");
       } finally {
@@ -194,7 +200,10 @@ export default function JobDetailScreen() {
           {/* Open source link */}
           {job.source_url ? (
             <Pressable
-              onPress={() => openLink(job.source_url!)}
+              onPress={() => {
+                trackJobOutbound(job.id);
+                openLink(job.source_url!);
+              }}
               style={({ pressed }) => [styles.openSourceBtn, pressed && { opacity: 0.8 }]}
             >
               <Ionicons name="open-outline" size={16} color={COLORS.primary} />

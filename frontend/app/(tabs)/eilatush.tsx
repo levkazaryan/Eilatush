@@ -24,6 +24,7 @@ import { router } from "expo-router";
 import { api } from "../../api";
 import { COLORS, RADIUS, SPACING } from "../../theme";
 import { EventCard, BusinessCard, JobCard, NewsCard } from "../../components";
+import { trackScreen } from "../../utils/analytics";
 
 const MASCOT_IMG = require("../../assets/images/eilatush-mascot.png");
 
@@ -152,6 +153,7 @@ export default function EilatushScreen() {
 
   // ---- persistence ----
   useEffect(() => {
+    trackScreen("eilatush");
     (async () => {
       try {
         const [rawMsgs, rawSess, rawGender] = await Promise.all([
