@@ -1,0 +1,84 @@
+name: Web PWA Deploy (Hostinger FTP)
+
+on:
+  # Manual trigger from GitHub Actions UI
+  workflow_dispatch:
+
+  # Auto-trigger on every push to main that touches the frontend / workflow
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/web-deploy.yml"
+
+concurrency:
+  group: web-deploy-hostinger
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    name: Build PWA & Deploy to Hostinger
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build PWA (static web export)
+        env:
+          # Backend API the production website will talk to
+          EXPO_PUBLIC_BACKEND_URL: ${{ secrets.EILATUSH_BACKEND_URL }}
+          # Public site URL — used for share links, canonical, OG, etc.
+          EXPO_PUBLIC_APP_URL: https://eilatush.app
+        run: |
+          if [ -z "$EXPO_PUBLIC_BACKEND_URL" ]; then
+            echo "::warning::EILATUSH_BACKEND_URL secret missing — falling back to baked-in URL in api.ts"
+          fi
+          yarn build:web
+          echo "----- dist contents -----"
+          ls -la dist | head -30
+          echo "Total files: $(find dist -type f | wc -l)"
+          echo "Total size:  $(du -sh dist | cut -f1)"
+
+      - name: Deploy to Hostinger via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.HOSTINGER_FTP_HOST }}
+          username: ${{ secrets.HOSTINGER_FTP_USERNAME }}
+          password: ${{ secrets.HOSTINGER_FTP_PASSWORD }}
+          port: 21
+          protocol: ftp
+          local-dir: ./frontend/dist/
+          server-dir: ${{ secrets.HOSTINGER_FTP_REMOTE_PATH }}
+          # Clean state on every deploy — files removed locally get removed remotely too.
+          # Keeps these manually-managed files on the server safe:
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+            **/.DS_Store
+            .ftpquota
+            .htaccess.bak
+          # Verbose logs help diagnose first-time setup issues
+          log-level: standard
+          # Don't fail loudly if a transient file lock happens on Hostinger
+          dangerous-clean-slate: false
+
+      - name: Done
+        run: |
+          echo "::notice title=Web Deploy Complete::🐬 https://eilatush.app"

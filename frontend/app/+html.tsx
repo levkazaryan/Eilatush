@@ -33,7 +33,7 @@ export default function Root({ children }: PropsWithChildren) {
           content="אילתוש, אילת, אירועים באילת, עסקים באילת, חדשות אילת, משרות אילת, מה לעשות באילת, אפליקציה אילת"
         />
         <meta name="author" content="Lev Kazaryan" />
-        <link rel="canonical" href="https://eilatush.emergent.host/" />
+        <link rel="canonical" href="https://eilatush.app/" />
 
         {/* ── PWA manifest ─────────────────────────────────────────────── */}
         <link rel="manifest" href="/manifest.webmanifest" />
@@ -61,12 +61,12 @@ export default function Root({ children }: PropsWithChildren) {
           property="og:description"
           content="אירועים, עסקים, חדשות, משרות ועוזרת AI חכמה בעברית — הכל באפליקציה אחת."
         />
-        <meta property="og:image" content="https://eilatush.emergent.host/og-image.jpg" />
+        <meta property="og:image" content="https://eilatush.app/og-image.jpg" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
         <meta property="og:image:alt" content="אילתוש — הדולפין המקומי של אילת" />
         <meta property="og:locale" content="he_IL" />
-        <meta property="og:url" content="https://eilatush.emergent.host/" />
+        <meta property="og:url" content="https://eilatush.app/" />
 
         {/* ── Twitter / X Cards ─────────────────────────────────────────── */}
         <meta name="twitter:card" content="summary_large_image" />
@@ -75,7 +75,7 @@ export default function Root({ children }: PropsWithChildren) {
           name="twitter:description"
           content="אירועים, עסקים, חדשות, משרות ועוזרת AI חכמה. הכל באפליקציה אחת."
         />
-        <meta name="twitter:image" content="https://eilatush.emergent.host/og-image.jpg" />
+        <meta name="twitter:image" content="https://eilatush.app/og-image.jpg" />
 
         {/*
           Disable body scrolling on web so RN ScrollView components work correctly.

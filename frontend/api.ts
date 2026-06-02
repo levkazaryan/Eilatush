@@ -215,7 +215,7 @@ export const openLink = (url?: string) => {
 export const CONTACT_PHONE = "972535319943";
 export const APP_URL =
   (typeof process !== "undefined" && process.env?.EXPO_PUBLIC_APP_URL) ||
-  "https://eilat-connect.preview.emergentagent.com";
+  "https://eilatush.app";
 export const SHARE_MSG = `היי 👋
 גיליתי את אילתוש 🐠 - אפליקציה שמרכזת הכל על אילת:
 אירועים, עסקים, עבודה, חדשות ואיש קשר חכם שיודע הכל על העיר.
