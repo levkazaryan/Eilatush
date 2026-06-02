@@ -1,0 +1,69 @@
+name: Android Development Build (EAS)
+
+# Manual-only — produces an installable APK with expo-dev-client embedded.
+# Install it once on your phone, then "Preview in Expo" loads inside this custom
+# build instead of Expo Go — fixes "Something went wrong" on SDK 54 projects.
+
+on:
+  workflow_dispatch:
+    inputs:
+      auto_increment:
+        description: "Bump versionCode in EAS?"
+        type: boolean
+        default: false
+
+concurrency:
+  group: eas-android-dev-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: EAS Android Dev Build (APK + dev-client)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Setup EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Trigger EAS dev build (Android APK + dev-client)
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          echo "Starting EAS dev build with profile: development"
+          eas build \
+            --platform android \
+            --profile development \
+            --non-interactive \
+            --no-wait
+
+      - name: Print dashboard link
+        run: |
+          echo "::notice title=Dev Build Started::Download APK from https://expo.dev/accounts/levkazaryan/projects/eilatush/builds"
+          echo ""
+          echo "After build finishes (~15-20 min):"
+          echo "  1. Open the build URL on your phone"
+          echo "  2. Tap 'Install' to download the APK"
+          echo "  3. Allow 'Install unknown apps' for your browser"
+          echo "  4. Install — you'll see 'Eilatush (development)' on your home screen"
+          echo "  5. Back in Emergent, tap 'Preview in Expo' — now it loads inside your dev build"
