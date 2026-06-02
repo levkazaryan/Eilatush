@@ -1,0 +1,37 @@
+# Cache headers for the Eilatush PWA (Cloudflare Pages / Netlify format)
+# Used by both platforms to set HTTP cache headers per file pattern.
+
+# ── Service worker MUST never be cached itself ──────────────────────────
+# Otherwise users will be stuck on an old SW long after we deploy fixes.
+/service-worker.js
+  Cache-Control: no-cache, no-store, must-revalidate
+  Service-Worker-Allowed: /
+
+# ── Manifest can be revalidated quickly ─────────────────────────────────
+/manifest.webmanifest
+  Cache-Control: public, max-age=3600
+
+# ── Icons and OG image — long cache (we version filenames) ──────────────
+/icon-*
+  Cache-Control: public, max-age=2592000, immutable
+
+/maskable-*
+  Cache-Control: public, max-age=2592000, immutable
+
+/apple-touch-icon.png
+  Cache-Control: public, max-age=2592000
+
+/favicon-*.png
+  Cache-Control: public, max-age=2592000
+
+/og-image.*
+  Cache-Control: public, max-age=2592000
+
+# ── Hashed static assets (Expo emits hashed filenames in /_expo) ─────────
+# These are content-addressable so we can cache them forever.
+/_expo/static/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# ── HTML files — revalidate every visit (so updates roll out fast) ──────
+/*.html
+  Cache-Control: public, max-age=0, must-revalidate
