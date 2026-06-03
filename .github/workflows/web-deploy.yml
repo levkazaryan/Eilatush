@@ -53,13 +53,14 @@ jobs:
           echo "Total size:  $(du -sh dist | cut -f1)"
 
       - name: Deploy to Hostinger via FTPS (with retry)
-        # Hostinger sometimes throttles FTPS connections from CI IPs — retry up to 3 times.
-        # We use lftp with: single-connection upload, generous timeouts, permissive SSL.
+        # Hostinger has a known issue where the FTPS DATA channel breaks even when
+        # the CONTROL channel works. Fix: keep control channel encrypted (auth is safe)
+        # but disable encryption on data channel so file transfers actually complete.
         uses: nick-fields/retry@v3
         with:
           timeout_minutes: 12
           max_attempts: 3
-          retry_wait_seconds: 90
+          retry_wait_seconds: 60
           command: |
             cd "${{ github.workspace }}"
             sudo apt-get update -qq && sudo apt-get install -qq -y lftp >/dev/null
@@ -69,42 +70,36 @@ jobs:
             echo "File count: $(find frontend/dist -type f | wc -l)"
             echo "Total size: $(du -sh frontend/dist | cut -f1)"
 
-            # Write password to file so it never appears in process list / logs
-            PASSFILE=$(mktemp)
-            chmod 600 "$PASSFILE"
-            printf '%s' "${{ secrets.HOSTINGER_FTP_PASSWORD }}" > "$PASSFILE"
-
             lftp -e "
+              debug -o /tmp/lftp.log 3;
               set ssl:verify-certificate no;
               set ssl:check-hostname no;
               set ftp:ssl-allow yes;
-              set ftp:ssl-protect-data yes;
               set ftp:ssl-force yes;
+              set ftp:ssl-protect-data no;
+              set ftp:ssl-protect-list yes;
               set ftp:passive-mode true;
-              set ftp:use-mlsd true;
+              set ftp:use-mlsd false;
+              set ftp:prefer-epsv false;
               set net:timeout 60;
-              set net:max-retries 5;
+              set net:max-retries 3;
               set net:reconnect-interval-base 15;
-              set net:reconnect-interval-multiplier 1.5;
-              set net:reconnect-interval-max 60;
+              set net:reconnect-interval-max 90;
               set net:persist-retries 5;
               set xfer:clobber on;
-              set cmd:fail-exit yes;
               set mirror:use-pget-n 1;
               set mirror:parallel-transfer-count 1;
               set mirror:set-permissions no;
-              set log:enabled/xfer no;
-              open -u '${{ secrets.HOSTINGER_FTP_USERNAME }}' ftp://${{ secrets.HOSTINGER_FTP_HOST }};
-              user '${{ secrets.HOSTINGER_FTP_USERNAME }}' $(cat $PASSFILE);
-              mirror -R --only-newer --no-perms --verbose=1 --exclude-glob .git* --exclude-glob .DS_Store --exclude-glob .ftpquota frontend/dist/ ${REMOTE_DIR};
+              open -u '${{ secrets.HOSTINGER_FTP_USERNAME }}','${{ secrets.HOSTINGER_FTP_PASSWORD }}' ftp://${{ secrets.HOSTINGER_FTP_HOST }};
+              mirror -R --no-perms --verbose=1 --exclude-glob .git* --exclude-glob .DS_Store --exclude-glob .ftpquota frontend/dist/ ${REMOTE_DIR};
               bye;
             " || {
               EXITCODE=$?
-              rm -f "$PASSFILE"
-              echo "::error::lftp exited with code $EXITCODE — see output above for details"
+              echo "─── LFTP DEBUG LOG (last 80 lines) ───"
+              tail -n 80 /tmp/lftp.log 2>/dev/null || echo "(no debug log)"
+              echo "::error::lftp exited with code $EXITCODE — see debug log above"
               exit $EXITCODE
             }
-            rm -f "$PASSFILE"
             echo "::notice::Deploy succeeded → https://eilatush.app"
 
       - name: Done
