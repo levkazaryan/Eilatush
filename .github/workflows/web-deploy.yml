@@ -1,12 +1,10 @@
-name: Web PWA Deploy (Hostinger FTP)
+name: Web PWA Deploy (Hostinger Git Auto-Deploy)
+
+# Builds the PWA and pushes it to a separate "web-dist" branch.
+# Hostinger then pulls that branch via webhook (no FTP needed — bypasses IP blocks).
 
 on:
-  # Manual trigger from GitHub Actions UI
   workflow_dispatch:
-
-  # Auto-trigger on every push to main.
-  # No paths filter — Emergent's "Save to GitHub" sometimes batches files
-  # in ways that miss strict path filters. Better to always build + deploy.
   push:
     branches: [main]
 
@@ -14,19 +12,21 @@ concurrency:
   group: web-deploy-hostinger
   cancel-in-progress: true
 
-jobs:
-  build-and-deploy:
-    name: Build PWA & Deploy to Hostinger
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+permissions:
+  contents: write   # Required to push to the deploy branch
 
-    defaults:
-      run:
-        working-directory: frontend
+jobs:
+  build-and-publish:
+    name: Build PWA & Publish to deploy branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          # Need full history to push to other branches
+          fetch-depth: 0
 
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
@@ -35,16 +35,16 @@ jobs:
 
       - name: Install dependencies
         run: yarn install
+        working-directory: frontend
 
       - name: Build PWA (static web export)
+        working-directory: frontend
         env:
-          # Backend API the production website will talk to
           EXPO_PUBLIC_BACKEND_URL: ${{ secrets.EILATUSH_BACKEND_URL }}
-          # Public site URL — used for share links, canonical, OG, etc.
           EXPO_PUBLIC_APP_URL: https://eilatush.app
         run: |
           if [ -z "$EXPO_PUBLIC_BACKEND_URL" ]; then
-            echo "::warning::EILATUSH_BACKEND_URL secret missing — falling back to baked-in URL in api.ts"
+            echo "::warning::EILATUSH_BACKEND_URL secret missing — using baked-in URL in api.ts"
           fi
           yarn build:web
           echo "----- dist contents -----"
@@ -52,56 +52,39 @@ jobs:
           echo "Total files: $(find dist -type f | wc -l)"
           echo "Total size:  $(du -sh dist | cut -f1)"
 
-      - name: Deploy to Hostinger via FTPS (with retry)
-        # Hostinger has a known issue where the FTPS DATA channel breaks even when
-        # the CONTROL channel works. Fix: keep control channel encrypted (auth is safe)
-        # but disable encryption on data channel so file transfers actually complete.
-        uses: nick-fields/retry@v3
+      - name: Publish dist/ to web-dist branch
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          timeout_minutes: 12
-          max_attempts: 3
-          retry_wait_seconds: 60
-          command: |
-            cd "${{ github.workspace }}"
-            sudo apt-get update -qq && sudo apt-get install -qq -y lftp >/dev/null
-            REMOTE_DIR="${{ secrets.HOSTINGER_FTP_REMOTE_PATH }}"
-            REMOTE_DIR="${REMOTE_DIR:-/public_html/}"
-            echo "─── Uploading frontend/dist/ → ${REMOTE_DIR} ───"
-            echo "File count: $(find frontend/dist -type f | wc -l)"
-            echo "Total size: $(du -sh frontend/dist | cut -f1)"
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./frontend/dist
+          publish_branch: web-dist
+          force_orphan: true        # Each deploy = fresh single-commit branch (no history bloat)
+          enable_jekyll: false      # Skip Jekyll processing (we're a static SPA)
+          user_name: "eilatush-bot"
+          user_email: "deploy@eilatush.app"
+          commit_message: "deploy: ${{ github.event.head_commit.message || 'manual deploy' }} (${{ github.sha }})"
 
-            lftp -e "
-              debug -o /tmp/lftp.log 3;
-              set ssl:verify-certificate no;
-              set ssl:check-hostname no;
-              set ftp:ssl-allow yes;
-              set ftp:ssl-force yes;
-              set ftp:ssl-protect-data no;
-              set ftp:ssl-protect-list yes;
-              set ftp:passive-mode true;
-              set ftp:use-mlsd false;
-              set ftp:prefer-epsv false;
-              set net:timeout 60;
-              set net:max-retries 3;
-              set net:reconnect-interval-base 15;
-              set net:reconnect-interval-max 90;
-              set net:persist-retries 5;
-              set xfer:clobber on;
-              set mirror:use-pget-n 1;
-              set mirror:parallel-transfer-count 1;
-              set mirror:set-permissions no;
-              open -u '${{ secrets.HOSTINGER_FTP_USERNAME }}','${{ secrets.HOSTINGER_FTP_PASSWORD }}' ftp://${{ secrets.HOSTINGER_FTP_HOST }};
-              mirror -R --no-perms --verbose=1 --exclude-glob .git* --exclude-glob .DS_Store --exclude-glob .ftpquota frontend/dist/ ${REMOTE_DIR};
-              bye;
-            " || {
-              EXITCODE=$?
-              echo "─── LFTP DEBUG LOG (last 80 lines) ───"
-              tail -n 80 /tmp/lftp.log 2>/dev/null || echo "(no debug log)"
-              echo "::error::lftp exited with code $EXITCODE — see debug log above"
-              exit $EXITCODE
-            }
-            echo "::notice::Deploy succeeded → https://eilatush.app"
+      - name: Notify Hostinger to pull
+        # If you set up a Hostinger Git webhook URL, paste it as a GitHub Secret
+        # named HOSTINGER_DEPLOY_WEBHOOK. If empty, this step skips silently.
+        env:
+          WEBHOOK_URL: ${{ secrets.HOSTINGER_DEPLOY_WEBHOOK }}
+        run: |
+          if [ -z "$WEBHOOK_URL" ]; then
+            echo "::notice::HOSTINGER_DEPLOY_WEBHOOK secret not set — Hostinger will need a manual pull"
+            echo "Set it up later: hPanel → eilatush.app → Advanced → Git → copy webhook URL → add as GitHub Secret"
+            exit 0
+          fi
+          echo "Triggering Hostinger deploy webhook..."
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$WEBHOOK_URL")
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo "::notice::Hostinger webhook responded $HTTP_CODE — deploy in progress on Hostinger"
+          else
+            echo "::warning::Hostinger webhook returned $HTTP_CODE — pull manually from hPanel"
+          fi
 
       - name: Done
         run: |
-          echo "::notice title=Web Deploy Complete::🐬 https://eilatush.app"
+          echo "::notice title=Built & Pushed::Built PWA → branch 'web-dist'"
+          echo "::notice title=Next::Hostinger will pull from 'web-dist' branch into public_html/"
+          echo "::notice title=Live URL::https://eilatush.app"
