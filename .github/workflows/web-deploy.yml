@@ -4,12 +4,11 @@ on:
   # Manual trigger from GitHub Actions UI
   workflow_dispatch:
 
-  # Auto-trigger on every push to main that touches the frontend / workflow
+  # Auto-trigger on every push to main.
+  # No paths filter — Emergent's "Save to GitHub" sometimes batches files
+  # in ways that miss strict path filters. Better to always build + deploy.
   push:
     branches: [main]
-    paths:
-      - "frontend/**"
-      - ".github/workflows/web-deploy.yml"
 
 concurrency:
   group: web-deploy-hostinger

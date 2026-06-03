@@ -12,16 +12,17 @@ on:
           - production
           - preview
 
-  # Auto-trigger on every push to main that touches the frontend / workflow
+  # Auto-trigger on every push to main.
+  # We intentionally do NOT use a `paths:` filter — Emergent's "Save to GitHub"
+  # sometimes batches commits in ways that miss the filter. Easier to just
+  # build on every push and let users cancel from the Actions UI if needed.
   push:
     branches: [main]
-    paths:
-      - "frontend/**"
-      - ".github/workflows/android-build.yml"
 
 concurrency:
   group: eas-android-build
-  cancel-in-progress: false
+  # Cancel any older queued build when a newer commit arrives — keeps queue clean
+  cancel-in-progress: true
 
 jobs:
   build:
