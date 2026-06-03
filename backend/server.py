@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import asyncio
 import logging
 import json
 import uuid
@@ -861,7 +862,7 @@ async def _llm_classify(message: str, session_id: str) -> Dict[str, Any]:
             api_key=EMERGENT_LLM_KEY,
             session_id=session_id,
             system_message=EILATUSH_SYSTEM_PROMPT,
-        ).with_model("anthropic", "claude-sonnet-4-5-20250929")
+        ).with_model("anthropic", "claude-haiku-4-5-20251001")  # Haiku = 3-5x faster for JSON classification
         resp = await chat.send_message(UserMessage(text=message))
         text = resp.strip()
         # strip code fences if present
@@ -926,7 +927,17 @@ EILATUSH_REPLY_PROMPT = """\
 }}"""
 
 
+# 10-minute in-memory weather cache shared across all chat requests
+_weather_cache: Dict[str, Any] = {"value": None, "ts": 0.0}
+
 async def _fetch_weather_brief() -> str:
+    # Return cached value if still fresh (< 10 minutes old) — weather barely changes
+    import time as _t
+    now = _t.time()
+    cached_val = _weather_cache.get("value")
+    cached_ts = _weather_cache.get("ts") or 0.0
+    if cached_val and (now - cached_ts) < 600:  # 10 min TTL
+        return cached_val
     try:
         import httpx as _h
         async with _h.AsyncClient(timeout=6) as c:
@@ -953,9 +964,13 @@ async def _fetch_weather_brief() -> str:
                 "לא ידוע"
             )
             tod = "יום" if is_day else "לילה"
-            return f"{round(t) if t is not None else '?'}° · {label} · {tod}"
+            result = f"{round(t) if t is not None else '?'}° · {label} · {tod}"
+            _weather_cache["value"] = result
+            _weather_cache["ts"] = now
+            return result
     except Exception:
-        return "לא זמין"
+        # Don't update cache on failure — keep last good value if any
+        return cached_val or "לא זמין"
 
 
 def _summarize_results(intent: str, results: List[Dict[str, Any]]) -> str:
@@ -1023,7 +1038,7 @@ async def _generate_reply(
             api_key=EMERGENT_LLM_KEY,
             session_id=f"{session_id}_reply",
             system_message=system_msg,
-        ).with_model("anthropic", "claude-sonnet-4-5-20250929")
+        ).with_model("anthropic", "claude-haiku-4-5-20251001")  # Haiku for 1-3 sentence replies — 3-5x faster than Sonnet
         resp = await chat.send_message(UserMessage(text=prompt))
         text = resp.strip()
         if text.startswith("```"):
@@ -1095,7 +1110,12 @@ async def eilatush_chat(body: ChatRequest):
     except Exception as _e:
         log.warning("admin chat failed: %s", _e)
 
-    parsed = await _llm_classify(user_msg, session_id)
+    # ── PARALLELIZE: kick off classify + weather at the same time ─────────
+    # Classify takes ~1-2s, weather is usually cached so ~0ms but worst case ~0.5s.
+    # Running together saves ~0.5-1s on cold weather cache.
+    classify_task = asyncio.create_task(_llm_classify(user_msg, session_id))
+    weather_task = asyncio.create_task(_fetch_weather_brief())
+    parsed = await classify_task
     intent = parsed.get("intent", "general")
     filters = parsed.get("filters") or {}
     results: List[Dict[str, Any]] = []
@@ -1147,7 +1167,7 @@ async def eilatush_chat(body: ChatRequest):
         results = [{"type": "news", "item": d} for d in docs[:10]]
 
     # -- 2nd LLM pass for conversational reply + follow-ups --
-    weather = await _fetch_weather_brief()
+    weather = await weather_task  # already started in parallel above
     gen = await _generate_reply(user_msg, intent, results, session_id, weather, body.user_gender)
 
     return {
