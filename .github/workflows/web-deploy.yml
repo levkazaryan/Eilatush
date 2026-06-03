@@ -53,30 +53,33 @@ jobs:
           echo "Total files: $(find dist -type f | wc -l)"
           echo "Total size:  $(du -sh dist | cut -f1)"
 
-      - name: Deploy to Hostinger via FTPS
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+      - name: Deploy to Hostinger via FTPS (with retry)
+        # Hostinger sometimes throttles FTPS connections from CI IPs — retry up to 3 times
+        uses: nick-fields/retry@v3
         with:
-          server: ${{ secrets.HOSTINGER_FTP_HOST }}
-          username: ${{ secrets.HOSTINGER_FTP_USERNAME }}
-          password: ${{ secrets.HOSTINGER_FTP_PASSWORD }}
-          port: 21
-          protocol: ftps
-          local-dir: ./frontend/dist/
-          server-dir: ${{ secrets.HOSTINGER_FTP_REMOTE_PATH }}
-          # Files removed locally get removed remotely too. Keep these safe:
-          # NOTE: We do NOT exclude **/node_modules/** because Expo's web build
-          # outputs vector-icons fonts under dist/assets/node_modules/@expo/vector-icons/...
-          # Excluding them would break ALL icons on the live site.
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/.DS_Store
-            .ftpquota
-            .htaccess.bak
-          log-level: standard
-          dangerous-clean-slate: false
-          # SSL setting needed for many shared hosting setups (self-signed/intermediate certs)
-          security: loose
+          timeout_minutes: 8
+          max_attempts: 3
+          retry_wait_seconds: 45
+          command: |
+            cd "${{ github.workspace }}"
+            # Use lftp (preinstalled on ubuntu-latest) — much more tolerant of transient drops
+            sudo apt-get update -qq && sudo apt-get install -qq -y lftp >/dev/null
+            REMOTE_DIR="${{ secrets.HOSTINGER_FTP_REMOTE_PATH }}"
+            REMOTE_DIR="${REMOTE_DIR:-/public_html/}"
+            echo "Uploading frontend/dist/ → ${REMOTE_DIR}"
+            lftp -e "
+              set ssl:verify-certificate no;
+              set ftp:ssl-protect-data true;
+              set ftp:ssl-force true;
+              set ftp:passive-mode true;
+              set net:timeout 30;
+              set net:max-retries 3;
+              set net:reconnect-interval-base 10;
+              set mirror:parallel-transfer-count 4;
+              open -u '${{ secrets.HOSTINGER_FTP_USERNAME }}','${{ secrets.HOSTINGER_FTP_PASSWORD }}' ftp://${{ secrets.HOSTINGER_FTP_HOST }};
+              mirror -R --delete --verbose --exclude-glob .git* --exclude-glob .DS_Store --exclude-glob .ftpquota frontend/dist/ ${REMOTE_DIR};
+              bye;
+            "
 
       - name: Done
         run: |
