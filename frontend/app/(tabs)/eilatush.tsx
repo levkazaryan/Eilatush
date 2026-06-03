@@ -240,25 +240,78 @@ export default function EilatushScreen() {
     setMessages((m) => [...m, userMsg]);
     setLoading(true);
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
+
+    const botMsgId = `b-${Date.now()}`;
+    let metaReceived = false;
+    let accumulatedText = "";
+
     try {
-      const res = await api.chat(text, sessionId, history, userGender ?? undefined);
-      if (res.session_id) setSessionId(res.session_id);
-      const botMsg: Msg = {
-        id: `b-${Date.now()}`,
-        role: "bot",
-        text: res.reply || "הנה מה שמצאתי",
-        results: res.results || [],
-        intent: res.intent,
-        followUps: Array.isArray(res.follow_ups) && res.follow_ups.length
-          ? res.follow_ups
-          : undefined,
-      };
-      setMessages((m) => [...m, botMsg]);
+      await new Promise<void>((resolve) => {
+        const cancel = api.chatStream(
+          text,
+          {
+            onMeta: (meta) => {
+              if (meta?.session_id) setSessionId(meta.session_id);
+              metaReceived = true;
+              // Insert empty bot message right away — results render immediately
+              const initialBot: Msg = {
+                id: botMsgId,
+                role: "bot",
+                text: "",
+                results: meta?.results || [],
+                intent: meta?.intent,
+              };
+              setMessages((m) => [...m, initialBot]);
+              setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 40);
+            },
+            onToken: (token) => {
+              accumulatedText += token;
+              setMessages((m) =>
+                m.map((b) =>
+                  b.id === botMsgId ? { ...b, text: accumulatedText } : b,
+                ),
+              );
+            },
+            onDone: (data) => {
+              const finalReply = (data?.reply || accumulatedText || "").trim();
+              const followUps =
+                Array.isArray(data?.follow_ups) && data.follow_ups.length
+                  ? data.follow_ups
+                  : undefined;
+              setMessages((m) =>
+                m.map((b) =>
+                  b.id === botMsgId
+                    ? { ...b, text: finalReply || b.text, followUps }
+                    : b,
+                ),
+              );
+              setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+              resolve();
+            },
+            onError: (err) => {
+              console.warn("chat stream err", err);
+              if (!metaReceived) {
+                setMessages((m) => [
+                  ...m,
+                  { id: `b-${Date.now()}`, role: "bot", text: "מצטערים, משהו השתבש. נסו שוב." },
+                ]);
+              }
+              resolve();
+            },
+          },
+          { session_id: sessionId, history, user_gender: userGender ?? undefined },
+        );
+        // Safety timeout — 45s max
+        setTimeout(() => {
+          cancel();
+          resolve();
+        }, 45000);
+      });
     } catch (e) {
       console.warn("chat err", e);
       setMessages((m) => [
         ...m,
-        { id: `b-${Date.now()}`, role: "bot", text: "מצטער, משהו השתבש. נסו שוב." },
+        { id: `b-${Date.now()}`, role: "bot", text: "מצטערים, משהו השתבש. נסו שוב." },
       ]);
     } finally {
       setLoading(false);

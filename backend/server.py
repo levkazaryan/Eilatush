@@ -927,6 +927,31 @@ EILATUSH_REPLY_PROMPT = """\
 }}"""
 
 
+# Plain-text streaming variant — same persona, no JSON wrapping so tokens stream naturally
+EILATUSH_REPLY_PROMPT_STREAM = """\
+את אילתוש - חברה אישית מקומית ותושבת אילת. את *אישה* ומדברת תמיד על עצמך בלשון נקבה ("אני יודעת", "מצאתי", "חשבתי", "אני כאן"). מעולם לא בלשון זכר.
+מדברת בעברית טבעית, קצרה, חמה, ועם הומור מקומי ("יא אילתושי", "חחח", "סבבה").
+תפקידך: לענות בצורה ישירה, לא למכור, לא להיות רובוטית. יש לך גישה לתוצאות אמיתיות ממסד הנתונים שלנו (אירועים, עסקים, חדשות, עבודות).
+
+חוקים:
+1. תשובה של 1-3 משפטים בלבד. אל תפרטי רשימות - המשתמש יראה את הכרטיסיות בעצמו.
+2. אם אין תוצאות - תגידי ישירות בלי תירוצים, והציעי כיוון חלופי בקצרה.
+3. התייחסי לפרט אחד מהתוצאות אם זה עוזר ("זה ב-Sunset נשמע שווה"). לא יותר.
+4. אל תגידי "מצאתי X תוצאות" - המשתמש רואה את זה.
+5. אם המשתמש שאל משהו כללי (לא חיפוש) - תעני כמו חברה שיודעת את אילת. קצר.
+6. מזג אוויר - אם המשתמש שאל - השתמשי במידע שצורף. אם לא - התעלמי.
+7. *חובה* - כל דיבור על עצמך בלשון נקבה בלבד. לעולם אל תכתבי בלשון זכר.
+8. אל תשתמשי באימוג'י דג בשום מקרה.
+
+חשוב מאוד: החזירי *רק את התשובה כטקסט פשוט בעברית*, ללא JSON, ללא markdown, ללא הקדמות. מקסימום 3 משפטים.
+
+מזג אוויר עכשיו באילת: {weather_ctx}
+שאלת המשתמש: "{user_msg}"
+כוונה שזוהתה: {intent}
+סיכום תוצאות שנמצאו (אל תצטטי הכל, רק התייחסי):
+{results_summary}"""
+
+
 # 10-minute in-memory weather cache shared across all chat requests
 _weather_cache: Dict[str, Any] = {"value": None, "ts": 0.0}
 
@@ -1178,6 +1203,217 @@ async def eilatush_chat(body: ChatRequest):
         "follow_ups": gen["follow_ups"] or _default_followups(intent),
         "weather": weather,
     }
+
+
+# ------------------- STREAMING CHAT (Server-Sent Events) -------------------
+
+@api_router.post("/eilatush/chat/stream")
+async def eilatush_chat_stream(body: ChatRequest):
+    """SSE streaming version of /eilatush/chat.
+
+    Event types emitted:
+      - meta:  initial payload with session_id, intent, results, weather (cards render immediately)
+      - token: a chunk of the assistant reply text (multiple of these)
+      - done:  final event with follow_ups + completion signal
+      - error: if anything fails mid-stream
+    """
+    from fastapi.responses import StreamingResponse
+
+    session_id = body.session_id or str(uuid.uuid4())
+    user_msg = body.message
+
+    async def event_generator():
+        def sse(event: str, data: Dict[str, Any]) -> str:
+            return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False, default=str)}\n\n"
+
+        try:
+            # Analytics (fire-and-forget)
+            try:
+                import analytics
+                await analytics.track(db, session_id, "ai_message", {"text": (user_msg or "")[:200]})
+            except Exception:
+                pass
+
+            # ---------- ADMIN MODE INTERCEPT ----------
+            try:
+                from admin_chat import handle_admin_turn
+                admin_resp = await handle_admin_turn(db, session_id, user_msg)
+                if admin_resp is not None:
+                    yield sse("meta", {
+                        "session_id": session_id,
+                        "intent": "admin",
+                        "results": [],
+                        "weather": None,
+                        "admin": admin_resp.get("admin_payload"),
+                    })
+                    # Stream admin reply as a single token (admin replies are usually short + structured)
+                    yield sse("token", {"text": admin_resp["reply"]})
+                    yield sse("done", {"follow_ups": admin_resp.get("follow_ups") or []})
+                    return
+            except Exception as _e:
+                log.warning("admin chat (stream) failed: %s", _e)
+
+            # ---------- Classify + weather in parallel ----------
+            classify_task = asyncio.create_task(_llm_classify(user_msg, session_id))
+            weather_task = asyncio.create_task(_fetch_weather_brief())
+            parsed = await classify_task
+            intent = parsed.get("intent", "general")
+            filters = parsed.get("filters") or {}
+            results: List[Dict[str, Any]] = []
+
+            if intent == "events":
+                q: Dict[str, Any] = {}
+                if filters.get("category"):
+                    q["category"] = filters["category"]
+                docs = await db.events.find(q, {"_id": 0}).to_list(500)
+                for d in docs:
+                    d["band"] = _time_band(d["starts_at"])
+                if filters.get("time"):
+                    docs = [d for d in docs if d["band"] == filters["time"]]
+                kws = filters.get("keywords") or []
+                if kws:
+                    docs = [d for d in docs if any(kw in (d.get("title", "") + (d.get("description") or "")) for kw in kws)]
+                docs.sort(key=lambda d: d["starts_at"])
+                results = [{"type": "event", "item": d} for d in docs[:10]]
+            elif intent == "businesses":
+                q = {}
+                if filters.get("category"):
+                    q["category"] = filters["category"]
+                docs = await db.businesses.find(q, {"_id": 0}).to_list(500)
+                for d in docs:
+                    d["open_now"] = _is_open_now(d.get("open_hours", ""))
+                if filters.get("time") == "now":
+                    docs = [d for d in docs if d["open_now"]]
+                kws = filters.get("keywords") or []
+                if kws:
+                    docs = [d for d in docs if any(
+                        kw in (d.get("name", "") + (d.get("description") or "") + " ".join(d.get("tags") or []))
+                        for kw in kws
+                    )]
+                results = [{"type": "business", "item": d} for d in docs[:10]]
+            elif intent == "jobs":
+                q = {}
+                if filters.get("category"):
+                    q["category"] = filters["category"]
+                if filters.get("urgency"):
+                    q["urgency"] = filters["urgency"]
+                docs = await db.jobs.find(q, {"_id": 0}).to_list(500)
+                results = [{"type": "job", "item": d} for d in docs[:10]]
+            elif intent == "news":
+                docs = await db.news.find({}, {"_id": 0}).to_list(500)
+                docs.sort(key=lambda d: d["published_at"], reverse=True)
+                results = [{"type": "news", "item": d} for d in docs[:10]]
+
+            weather = await weather_task
+
+            # ---------- 1ST FLUSH: meta event so cards render immediately ----------
+            yield sse("meta", {
+                "session_id": session_id,
+                "intent": intent,
+                "results": results,
+                "weather": weather,
+            })
+
+            # ---------- STREAMING REPLY ----------
+            # Build prompts (same as _generate_reply) and call litellm with stream=True
+            user_gender = body.user_gender
+            if user_gender == "m":
+                gender_rule = "המשתמש הוא *גבר*. פני אליו תמיד בלשון זכר: 'אתה', 'תגיד', 'בא לך', 'אתה יכול', 'מצאתי לך'. לעולם אל תפני אליו בלשון נקבה."
+            elif user_gender == "f":
+                gender_rule = "המשתמשת היא *אישה*. פני אליה תמיד בלשון נקבה: 'את', 'תגידי', 'בא לך', 'את יכולה', 'מצאתי לך'. לעולם אל תפני אליה בלשון זכר."
+            else:
+                gender_rule = "אם לא ברור המגדר של המשתמש - השתמשי בצורה ניטרלית או כפולה 'שאל/י'."
+
+            prompt = EILATUSH_REPLY_PROMPT_STREAM.format(
+                user_msg=user_msg,
+                intent=intent,
+                weather_ctx=weather,
+                results_summary=_summarize_results(intent, results),
+            )
+            prompt = f"{prompt}\n\nכללי פנייה למשתמש: {gender_rule}"
+
+            system_msg = (
+                "את אילתוש - חברה מקומית לתושבי אילת. "
+                "מדברת תמיד בלשון נקבה על עצמך. קצרה, חמה, עברית. "
+                "אל תשתמשי באימוג'י דג. "
+                f"{gender_rule}"
+            )
+
+            # Use litellm directly for streaming (emergentintegrations doesn't expose stream=True)
+            import litellm
+            from emergentintegrations.llm.utils import get_integration_proxy_url
+
+            params = {
+                "model": "claude-haiku-4-5-20251001",  # No provider prefix — Emergent proxy is OpenAI-style
+                "custom_llm_provider": "openai",
+                "api_key": EMERGENT_LLM_KEY,
+                "api_base": get_integration_proxy_url() + "/llm",
+                "messages": [
+                    {"role": "system", "content": system_msg},
+                    {"role": "user", "content": prompt},
+                ],
+                "stream": True,
+                "max_tokens": 600,
+            }
+
+            accumulated = ""
+            try:
+                response_stream = await litellm.acompletion(**params)
+                async for chunk in response_stream:
+                    try:
+                        delta = chunk.choices[0].delta.content if chunk.choices and chunk.choices[0].delta else None
+                    except Exception:
+                        delta = None
+                    if not delta:
+                        continue
+                    accumulated += delta
+                    yield sse("token", {"text": delta})
+            except Exception as e:
+                logger.exception("stream LLM failed: %s", e)
+                # Fallback: emit a generic reply
+                fallback = "הנה מה שמצאתי בשבילך 🐬"
+                yield sse("token", {"text": fallback})
+                accumulated = fallback
+
+            # ---------- Parse follow_ups from accumulated JSON (if present) ----------
+            reply_text = accumulated
+            follow_ups: List[str] = []
+            try:
+                cleaned = accumulated.strip()
+                if cleaned.startswith("```"):
+                    cleaned = cleaned.strip("`")
+                    if cleaned.startswith("json"):
+                        cleaned = cleaned[4:].strip()
+                parsed_json = json.loads(cleaned)
+                if isinstance(parsed_json, dict):
+                    if isinstance(parsed_json.get("reply"), str):
+                        reply_text = parsed_json["reply"]
+                    if isinstance(parsed_json.get("follow_ups"), list):
+                        follow_ups = [str(x) for x in parsed_json["follow_ups"]][:5]
+            except Exception:
+                pass
+
+            if not follow_ups:
+                follow_ups = _default_followups(intent)
+
+            yield sse("done", {
+                "follow_ups": follow_ups,
+                "reply": reply_text,  # final cleaned reply (in case caller wants to replace the streamed JSON)
+            })
+
+        except Exception as e:
+            logger.exception("chat/stream failed: %s", e)
+            yield sse("error", {"message": "מצטערים, משהו השתבש. נסו שוב."})
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",  # disable nginx buffering
+            "Connection": "keep-alive",
+        },
+    )
 
 # ------------------- SEED -------------------
 

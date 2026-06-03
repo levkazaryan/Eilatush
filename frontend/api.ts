@@ -142,6 +142,136 @@ export const api = {
     });
     return r.json();
   },
+
+  /**
+   * Streaming version of chat. Calls onMeta/onToken/onDone/onError as SSE events arrive.
+   * Returns a cancel function that aborts the stream when called.
+   * Falls back to the non-streaming endpoint if streaming isn't supported on this platform.
+   */
+  chatStream(
+    message: string,
+    handlers: {
+      onMeta?: (meta: any) => void;
+      onToken?: (text: string) => void;
+      onDone?: (data: any) => void;
+      onError?: (err: any) => void;
+    },
+    opts?: {
+      session_id?: string;
+      history?: { role: string; text: string }[];
+      user_gender?: "m" | "f";
+    },
+  ): () => void {
+    let cancelled = false;
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+
+    const fallback = async () => {
+      try {
+        const res = await fetch(`${API}/api/eilatush/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message,
+            session_id: opts?.session_id,
+            history: opts?.history,
+            user_gender: opts?.user_gender,
+          }),
+        });
+        const j = await res.json();
+        if (cancelled) return;
+        handlers.onMeta?.({
+          session_id: j.session_id,
+          intent: j.intent,
+          results: j.results,
+          weather: j.weather,
+        });
+        handlers.onToken?.(j.reply || "");
+        handlers.onDone?.({ reply: j.reply, follow_ups: j.follow_ups });
+      } catch (e) {
+        if (!cancelled) handlers.onError?.(e);
+      }
+    };
+
+    (async () => {
+      try {
+        const res = await fetch(`${API}/api/eilatush/chat/stream`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+          body: JSON.stringify({
+            message,
+            session_id: opts?.session_id,
+            history: opts?.history,
+            user_gender: opts?.user_gender,
+          }),
+          signal: controller?.signal,
+        });
+
+        // Detect whether we can read the body as a stream
+        // @ts-ignore — getReader is only on web's ReadableStream
+        const reader = res.body && typeof res.body.getReader === "function" ? res.body.getReader() : null;
+        if (!reader) {
+          // React Native fetch does not support streaming reader → fallback
+          console.log("[chatStream] no reader available — falling back to non-streaming");
+          await fallback();
+          return;
+        }
+
+        const decoder = new TextDecoder("utf-8");
+        let buffer = "";
+
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          if (cancelled) {
+            try {
+              await reader.cancel();
+            } catch (_) {}
+            return;
+          }
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          // SSE events are separated by blank lines (\n\n)
+          let sep;
+          while ((sep = buffer.indexOf("\n\n")) !== -1) {
+            const rawEvent = buffer.slice(0, sep);
+            buffer = buffer.slice(sep + 2);
+            const lines = rawEvent.split("\n");
+            let eventName = "message";
+            let dataLines: string[] = [];
+            for (const ln of lines) {
+              if (ln.startsWith("event:")) eventName = ln.slice(6).trim();
+              else if (ln.startsWith("data:")) dataLines.push(ln.slice(5).trimStart());
+            }
+            const dataStr = dataLines.join("\n");
+            if (!dataStr) continue;
+            let payload: any = null;
+            try {
+              payload = JSON.parse(dataStr);
+            } catch {
+              continue;
+            }
+            if (eventName === "meta") handlers.onMeta?.(payload);
+            else if (eventName === "token") handlers.onToken?.(payload?.text || "");
+            else if (eventName === "done") handlers.onDone?.(payload);
+            else if (eventName === "error") handlers.onError?.(payload);
+          }
+        }
+      } catch (e: any) {
+        if (cancelled) return;
+        // Streaming failed → try non-streaming fallback
+        console.warn("[chatStream] stream error, falling back:", e?.message || e);
+        await fallback();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      try {
+        controller?.abort();
+      } catch (_) {}
+    };
+  },
 };
 
 export const openWaze = (query?: string) => {
