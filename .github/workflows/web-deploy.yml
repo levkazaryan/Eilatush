@@ -63,12 +63,13 @@ jobs:
           protocol: ftps
           local-dir: ./frontend/dist/
           server-dir: ${{ secrets.HOSTINGER_FTP_REMOTE_PATH }}
-          # Hostinger uses FTPS explicit on port 21 — plain FTP is blocked.
-          # Files removed locally get removed remotely too. These remote files are safe:
+          # Files removed locally get removed remotely too. Keep these safe:
+          # NOTE: We do NOT exclude **/node_modules/** because Expo's web build
+          # outputs vector-icons fonts under dist/assets/node_modules/@expo/vector-icons/...
+          # Excluding them would break ALL icons on the live site.
           exclude: |
             **/.git*
             **/.git*/**
-            **/node_modules/**
             **/.DS_Store
             .ftpquota
             .htaccess.bak
