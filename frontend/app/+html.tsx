@@ -84,8 +84,8 @@ export default function Root({ children }: PropsWithChildren) {
         <style
           dangerouslySetInnerHTML={{
             __html: `
-              /* Fix for RN-Web root container */
-              body > div:first-child {
+              /* Fix for RN-Web root container — target #root by ID for highest specificity */
+              body > div#root {
                 position: fixed !important; top: 0; left: 0; right: 0; bottom: 0;
               }
               [role="tablist"] [role="tab"] * { overflow: visible !important; }
@@ -97,17 +97,38 @@ export default function Root({ children }: PropsWithChildren) {
                 to   { transform: translateY(0);    opacity: 1; }
               }
 
-              /* On wide screens, center the app inside a phone-frame */
-              @media (min-width: 768px) {
-                html { background: linear-gradient(135deg, #0172E5 0%, #14B8B3 100%); }
-                body > div:first-child {
-                  max-width: 480px !important;
-                  margin: 0 auto !important;
-                  box-shadow: 0 10px 60px rgba(0,0,0,0.30);
-                  border-radius: 24px;
-                  overflow: hidden;
+              /* On wide screens (tablet + desktop), center the app in a phone-frame */
+              @media (min-width: 600px) {
+                html {
+                  background: linear-gradient(135deg, #0172E5 0%, #14B8B3 100%) !important;
+                  min-height: 100vh;
+                }
+                body {
+                  background: transparent !important;
+                  overflow: visible !important;
+                }
+                /* Override the fixed full-width positioning above */
+                body > div#root {
+                  position: fixed !important;
                   top: 16px !important;
                   bottom: 16px !important;
+                  left: 50% !important;
+                  right: auto !important;
+                  transform: translateX(-50%) !important;
+                  width: 440px !important;
+                  max-width: calc(100vw - 32px) !important;
+                  box-shadow: 0 20px 80px rgba(0,0,0,0.35) !important;
+                  border-radius: 28px !important;
+                  overflow: hidden !important;
+                  background: #F7F8FA !important;
+                }
+              }
+              /* Slightly bigger frame on very wide screens (4K, ultra-wide) */
+              @media (min-width: 1280px) {
+                body > div#root {
+                  width: 480px !important;
+                  top: 32px !important;
+                  bottom: 32px !important;
                 }
               }
             `,
