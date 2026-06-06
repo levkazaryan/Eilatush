@@ -1,0 +1,87 @@
+name: Notify Update Available (post-Play-Store-publish)
+
+# Run this MANUALLY after Google Play has approved & published the new APK.
+# It tells the backend "the new version is now available" so the in-app update
+# prompt starts showing for users on older versions.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Published version (e.g., 1.0.2). Leave blank to use version from app.json."
+        required: false
+        type: string
+      force:
+        description: "Force update (blocks app until user updates)? Only use for critical fixes."
+        required: false
+        type: boolean
+        default: false
+      message:
+        description: "Optional custom message shown in the update modal (Hebrew)"
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  notify:
+    name: POST new version → backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        working-directory: frontend
+        run: |
+          INPUT_VER="${{ inputs.version }}"
+          if [ -z "$INPUT_VER" ]; then
+            VERSION=$(node -p "require('./app.json').expo.version")
+            echo "Using version from app.json: $VERSION"
+          else
+            VERSION="$INPUT_VER"
+            echo "Using version from input: $VERSION"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: POST /api/admin/version
+        env:
+          BACKEND_URL: ${{ secrets.EILATUSH_BACKEND_URL }}
+          ADMIN_PASSWORD: ${{ secrets.EILATUSH_ADMIN_PASSWORD }}
+          VERSION: ${{ steps.ver.outputs.version }}
+          FORCE: ${{ inputs.force }}
+          MSG: ${{ inputs.message }}
+        run: |
+          if [ -z "$BACKEND_URL" ] || [ -z "$ADMIN_PASSWORD" ]; then
+            echo "::error::EILATUSH_BACKEND_URL or EILATUSH_ADMIN_PASSWORD secret missing"
+            exit 1
+          fi
+
+          if [ -z "$MSG" ]; then
+            MSG="גרסה חדשה של אילתוש זמינה בחנות 🐬"
+          fi
+
+          BODY=$(jq -nc \
+            --arg pw "$ADMIN_PASSWORD" \
+            --arg v  "$VERSION" \
+            --arg m  "$MSG" \
+            --argjson f $([ "$FORCE" = "true" ] && echo true || echo false) \
+            '{password:$pw, latest_version:$v, force:$f, message:$m}')
+
+          echo "Notifying backend: version=$VERSION force=$FORCE"
+          HTTP_CODE=$(curl -sS -o /tmp/resp.json -w "%{http_code}" \
+            -X POST "$BACKEND_URL/api/admin/version" \
+            -H "Content-Type: application/json" \
+            -d "$BODY" || echo "000")
+
+          echo "─── Backend response (HTTP $HTTP_CODE) ───"
+          cat /tmp/resp.json
+          echo ""
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Notify failed with HTTP $HTTP_CODE"
+            exit 1
+          fi
+          echo "::notice title=Update Live::Users on older versions will now see the update prompt"
