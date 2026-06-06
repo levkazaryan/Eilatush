@@ -57,8 +57,14 @@ export function getCurrentVersion(): string {
 
 export async function checkForUpdate(): Promise<UpdateDecision> {
   // Skip on web — there's no Play Store there
-  if (Platform.OS === "web") return { kind: "none" };
-  if (!API_BASE) return { kind: "none" };
+  if (Platform.OS === "web") {
+    console.log("[update-check] skip — web");
+    return { kind: "none" };
+  }
+  if (!API_BASE) {
+    console.log("[update-check] skip — no API_BASE");
+    return { kind: "none" };
+  }
 
   let config: RemoteVersionConfig;
   try {
@@ -66,23 +72,33 @@ export async function checkForUpdate(): Promise<UpdateDecision> {
       method: "GET",
       headers: { Accept: "application/json" },
     });
-    if (!res.ok) return { kind: "none" };
+    if (!res.ok) {
+      console.log("[update-check] backend returned", res.status, "— skipping");
+      return { kind: "none" };
+    }
     config = (await res.json()) as RemoteVersionConfig;
-  } catch (e) {
+  } catch (e: any) {
     // Network / DNS / backend down → never block the user
+    console.log("[update-check] backend unreachable:", e?.message || e);
     return { kind: "none" };
   }
 
   const current = getCurrentVersion();
+  console.log(
+    `[update-check] installed=${current} | latest=${config.latest_version} | min=${config.min_required_version} | force=${config.force}`,
+  );
 
   // Force update — strict
   if (config.force === true || isLessThan(current, config.min_required_version)) {
+    console.log("[update-check] → FORCE update");
     return { kind: "force", config, current };
   }
   // Soft update — friendly suggestion
   if (isLessThan(current, config.latest_version)) {
+    console.log("[update-check] → SOFT update prompt");
     return { kind: "soft", config, current };
   }
+  console.log("[update-check] → up to date");
   return { kind: "none" };
 }
 
