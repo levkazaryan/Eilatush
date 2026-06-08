@@ -1,29 +1,29 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from "react";
-import { View, Text, StyleSheet, Pressable, Image, Animated, Platform, Easing } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
+import { View, Text, StyleSheet, Pressable, Animated, Platform, Easing } from "react-native";
+import Svg, { Path, Defs, LinearGradient as SvgGradient, Stop, G } from "react-native-svg";
 
-const MASCOT_IMG = require("../assets/images/eilatush-mascot.png");
-
-const GOLD = "#D4AF37";
-const GOLD_LIGHT = "#F2D785";
-const GOLD_DARK = "#A57C1B";
-const INK_2 = "#1A1A1A";
+// ───── Premium palette: matte black + hairline gold ─────
+const GOLD = "#D4AF37";          // primary gold
+const GOLD_LIGHT = "#EBC868";    // highlight
+const GOLD_DEEP = "#9A7A1F";     // shadow gold
+const INK = "#0A0A0B";           // matte black
+const INK_2 = "#111114";         // softer matte for subtle layering
+const HAIRLINE = "rgba(212,175,55,0.55)"; // thin gold line
+const HAIRLINE_SOFT = "rgba(212,175,55,0.25)"; // softer thin gold
 
 type Props = {
   fullName?: string;
   memberNumber?: string;
-  dob?: string; // YYYY-MM-DD
-  expiryDate?: string; // YYYY-MM-DD
-  // "preview" hides personal details and shows generic copy for the logged-out preview
+  dob?: string;
+  expiryDate?: string;
   preview?: boolean;
-  // when true, card is interactive and tap flips between front/back
   interactive?: boolean;
 };
 
 function formatHebDate(iso?: string): string {
-  if (!iso) return "";
+  if (!iso) return "—";
   try {
     const d = new Date(iso + (iso.length === 10 ? "T00:00:00Z" : ""));
     if (isNaN(d.getTime())) return iso;
@@ -34,6 +34,70 @@ function formatHebDate(iso?: string): string {
   } catch {
     return iso;
   }
+}
+
+function formatExpiry(iso?: string): string {
+  if (!iso) return "MM/YY";
+  try {
+    const d = new Date(iso + (iso.length === 10 ? "T00:00:00Z" : ""));
+    if (isNaN(d.getTime())) return "MM/YY";
+    const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const yy = String(d.getUTCFullYear()).slice(2);
+    return `${mm}/${yy}`;
+  } catch {
+    return "MM/YY";
+  }
+}
+
+// ───── Dolphin SVG (game-icons via Iconify, verified elegant leaping silhouette) ─────
+function Dolphin({
+  size = 120,
+  opacity = 1,
+  gradient = true,
+}: { size?: number; opacity?: number; gradient?: boolean }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 512 512" fill="none">
+      <Defs>
+        <SvgGradient id="dolphinGold" x1="0" y1="0" x2="1" y2="1">
+          <Stop offset="0" stopColor={GOLD_LIGHT} stopOpacity={1} />
+          <Stop offset="0.5" stopColor={GOLD} stopOpacity={1} />
+          <Stop offset="1" stopColor={GOLD_DEEP} stopOpacity={1} />
+        </SvgGradient>
+      </Defs>
+      <G opacity={opacity}>
+        {/* Main dolphin body (leaping) */}
+        <Path
+          d="M123.22 47.23c29.498 15.152 55.025 36.05 55.53 67.366c-93.62 83.867-83.862 179.356-97.002 270.34c-67.68 55.552-67.57 90.948-60.9 101.227c3.94.743 29.11-25.94 48.326-30.397c14.23-4.094 12.284-15.99 16.273-25.275c2.438 14.55 7.17 22.612 17.133 25.485c12.874 3.36 44.932 28.15 51.53 25.504c1.374-20.382-26.01-63.854-48.028-90.087c41.012-63.28 81.365-136.458 211.162-207.77c-3.21-3.706-6.216-6.45-8.8-7.986l9.198-15.472c11.617 6.907 20.522 19.56 29.248 35.033c5.94 10.532 11.528 22.644 16.96 35.117c15.682-32.87 22.983-66.406 16.402-90.254l17.35-4.786a87 87 0 0 1 1.927 8.83c33.29-4.253 55.718-13.083 85.11-29.322c3.744-2.068 19.054-13.012-.117-16.03c12.62-9.017 7.54-12.063 1.973-15.152c-6.486-3.6-20.302-8.948-35.758-8.556c-12.124-27.863-39.63-47.772-82.225-47.696c-28.532.052-63.842 9.086-105.828 30.688C217.895 27.64 164.92 20.468 123.22 47.23"
+          fill={gradient ? "url(#dolphinGold)" : GOLD}
+        />
+        {/* Eye */}
+        <Path
+          d="M410.162 75.97a9 9 0 1 1 0 18a9 9 0 0 1 0-18"
+          fill={gradient ? INK : INK}
+          opacity={gradient ? 1 : 0.5}
+        />
+      </G>
+    </Svg>
+  );
+}
+
+// ───── Tiny corner ornament (thin gold L) ─────
+function CornerOrn({ position }: { position: "tl" | "tr" | "bl" | "br" }) {
+  const map = {
+    tl: { top: 10, left: 10, borderTopWidth: 1, borderLeftWidth: 1, borderTopLeftRadius: 4 },
+    tr: { top: 10, right: 10, borderTopWidth: 1, borderRightWidth: 1, borderTopRightRadius: 4 },
+    bl: { bottom: 10, left: 10, borderBottomWidth: 1, borderLeftWidth: 1, borderBottomLeftRadius: 4 },
+    br: { bottom: 10, right: 10, borderBottomWidth: 1, borderRightWidth: 1, borderBottomRightRadius: 4 },
+  } as const;
+  return (
+    <View
+      pointerEvents="none"
+      style={[
+        { position: "absolute", width: 18, height: 18, borderColor: HAIRLINE },
+        map[position],
+      ]}
+    />
+  );
 }
 
 export default function VIPCard({
@@ -50,10 +114,8 @@ export default function VIPCard({
   useEffect(() => {
     Animated.timing(anim, {
       toValue: flipped ? 1 : 0,
-      duration: 550,
+      duration: 650,
       easing: Easing.inOut(Easing.cubic),
-      // Web doesn't fully support useNativeDriver for transform rotateY,
-      // so we keep it off for cross-platform parity.
       useNativeDriver: false,
     }).start();
   }, [flipped, anim]);
@@ -68,121 +130,141 @@ export default function VIPCard({
     setFlipped((f) => !f);
   };
 
+  const displayName = preview ? "שמכם יופיע כאן" : (fullName || "—");
+  const displayNumber = preview ? "VIP-2026-0000" : (memberNumber || "—");
+  const displayExpiry = preview ? "06/26" : formatExpiry(expiryDate);
+  const displayDob = preview ? "—" : formatHebDate(dob);
+
   return (
     <Pressable onPress={handlePress} style={styles.wrap} accessibilityLabel="כרטיס VIP — לחץ להפיכה">
-      {/* FRONT */}
+      {/* ╔══════════════ FRONT ══════════════╗ */}
       <Animated.View
         pointerEvents={flipped ? "none" : "auto"}
         style={[
           styles.cardAbs,
-          { transform: [{ perspective: 1000 }, { rotateY: frontRotate }], opacity: frontOpacity },
+          { transform: [{ perspective: 1200 }, { rotateY: frontRotate }], opacity: frontOpacity },
         ]}
       >
-        <LinearGradient
-          colors={["#000", INK_2, "#000"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.card}
-        >
-          {/* Decorative gold lines */}
-          <View pointerEvents="none" style={[styles.line, styles.lineTopRight]} />
-          <View pointerEvents="none" style={[styles.line, styles.lineMidRight]} />
-          <View pointerEvents="none" style={[styles.line, styles.lineBotLeft]} />
-          <View pointerEvents="none" style={[styles.line, styles.lineMidLeft]} />
-          <View pointerEvents="none" style={styles.cornerTL} />
-          <View pointerEvents="none" style={styles.cornerBR} />
+        <View style={styles.cardInner}>
+          {/* Outer hairline gold frame */}
+          <View pointerEvents="none" style={styles.outerHairline} />
+          {/* Inner hairline (a touch in) */}
+          <View pointerEvents="none" style={styles.innerHairline} />
 
-          {/* Top label */}
+          {/* Corner ornaments */}
+          <CornerOrn position="tl" />
+          <CornerOrn position="tr" />
+          <CornerOrn position="bl" />
+          <CornerOrn position="br" />
+
+          {/* ─── Top row: brand wordmark (RTL: brand right, status left) ─── */}
           <View style={styles.topRow}>
-            <Text style={styles.brandSmall} numberOfLines={1}>אילתוש · EILATUSH</Text>
-            <Text style={styles.chipText}>VIP</Text>
+            <View style={styles.brandRight}>
+              <Text style={styles.brandTitleHe}>תושב אילת</Text>
+              <View style={styles.brandLine} />
+              <Text style={styles.brandSub}>EILAT RESIDENT · VIP</Text>
+            </View>
+
+            <View style={styles.statusBox}>
+              <View style={styles.statusDot} />
+              <Text style={styles.statusText}>MEMBER</Text>
+            </View>
           </View>
 
-          {/* Mascot watermark (gold-tinted) */}
-          <View style={styles.mascotWrap} pointerEvents="none">
-            <Image
-              source={MASCOT_IMG}
-              style={styles.mascot}
-              resizeMode="contain"
-            />
+          {/* ─── Hero: bold dolphin ─── */}
+          <View style={styles.heroWrap} pointerEvents="none">
+            <Dolphin size={160} opacity={1} gradient />
           </View>
 
-          {/* Big title */}
-          <View style={styles.titleBlock}>
-            <Text style={styles.bigTitle}>תושב אילת</Text>
-            <Text style={styles.bigTitleGold}>VIP</Text>
+          {/* ─── Center-left VIP plate ─── */}
+          <View style={styles.vipPlateWrap} pointerEvents="none">
+            <View style={styles.vipPlate}>
+              <Text style={styles.vipPlateText}>VIP</Text>
+            </View>
           </View>
 
-          {/* Bottom hint */}
+          {/* ─── Bottom divider line ─── */}
+          <View style={styles.divider} pointerEvents="none" />
+
+          {/* ─── Bottom row: tap hint + app url ─── */}
           <View style={styles.bottomRow}>
-            <Text style={styles.tapHint}>{interactive ? "לחצו לפרטים ↻" : "כרטיס דיגיטלי"}</Text>
-            <Text style={styles.brandTiny}>EILATUSH.APP</Text>
+            <Text style={styles.flipHint}>{interactive ? "↻ לחצו להפיכת הכרטיס" : ""}</Text>
+            <Text style={styles.appUrl}>EILATUSH.APP</Text>
           </View>
-        </LinearGradient>
+        </View>
       </Animated.View>
 
-      {/* BACK */}
+      {/* ╔══════════════ BACK ══════════════╗ */}
       <Animated.View
         pointerEvents={flipped ? "auto" : "none"}
         style={[
           styles.cardAbs,
-          { transform: [{ perspective: 1000 }, { rotateY: backRotate }], opacity: backOpacity },
+          { transform: [{ perspective: 1200 }, { rotateY: backRotate }], opacity: backOpacity },
         ]}
       >
-        <LinearGradient
-          colors={[INK_2, "#000", INK_2]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-          style={styles.card}
-        >
-          <View pointerEvents="none" style={[styles.line, styles.lineTopRight]} />
-          <View pointerEvents="none" style={[styles.line, styles.lineBotLeft]} />
-          <View pointerEvents="none" style={styles.cornerTL} />
-          <View pointerEvents="none" style={styles.cornerBR} />
+        <View style={styles.cardInner}>
+          {/* Same hairline frame */}
+          <View pointerEvents="none" style={styles.outerHairline} />
+          <View pointerEvents="none" style={styles.innerHairline} />
 
-          <View style={styles.topRow}>
-            <Text style={styles.brandSmall} numberOfLines={1}>תושב אילת · VIP</Text>
-            <Text style={styles.chipText}>{preview ? "DEMO" : memberNumber || ""}</Text>
+          <CornerOrn position="tl" />
+          <CornerOrn position="tr" />
+          <CornerOrn position="bl" />
+          <CornerOrn position="br" />
+
+          {/* Dolphin watermark (very low opacity) — center */}
+          <View pointerEvents="none" style={styles.watermarkWrap}>
+            <Dolphin size={200} opacity={0.08} gradient={false} />
           </View>
 
-          <View style={styles.detailsBlock}>
-            <Text style={styles.fieldLabel}>שם מלא</Text>
-            <Text style={styles.fieldValue} numberOfLines={1}>{preview ? "שמכם יופיע כאן" : fullName || "—"}</Text>
-
-            <View style={styles.row2}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fieldLabel}>תאריך לידה</Text>
-                <Text style={styles.fieldValueSm}>{preview ? "—" : formatHebDate(dob)}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fieldLabel}>מס׳ חבר</Text>
-                <Text style={styles.fieldValueSm}>{preview ? "VIP-2026-0000" : memberNumber || "—"}</Text>
-              </View>
-            </View>
-
-            <View style={styles.row2}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fieldLabel}>תקף עד</Text>
-                <Text style={styles.fieldValueSm}>{preview ? "6 חודשים מההרשמה" : formatHebDate(expiryDate)}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fieldLabel}>סטטוס</Text>
-                <Text style={[styles.fieldValueSm, { color: "#33D17A" }]}>פעיל</Text>
-              </View>
+          {/* Header strip */}
+          <View style={styles.backHeader}>
+            <Text style={styles.backTitle}>תושב אילת · VIP</Text>
+            <View style={styles.backNumChip}>
+              <Text style={styles.backNumText}>{displayNumber}</Text>
             </View>
           </View>
 
+          {/* Thin gold separator under header */}
+          <View style={styles.thinSep} />
+
+          {/* Name label */}
+          <View style={styles.nameRow}>
+            <Text style={styles.fieldLabel}>שם החבר</Text>
+            <Text style={styles.nameValue} numberOfLines={1}>{displayName}</Text>
+          </View>
+
+          {/* Details grid */}
+          <View style={styles.detailsGrid}>
+            <Detail label="תאריך לידה" value={displayDob} />
+            <Detail label="תקף עד" value={displayExpiry} highlight />
+            <Detail label="סטטוס" value="פעיל" highlight />
+            <Detail label="חברות" value="6 חודשים" />
+          </View>
+
+          {/* Bottom row */}
           <View style={styles.bottomRow}>
-            <Text style={styles.tapHint}>↻ חזרה לחזית</Text>
-            <Text style={styles.brandTiny}>EILATUSH.APP</Text>
+            <Text style={styles.flipHint}>↻ חזרה לחזית</Text>
+            <Text style={styles.appUrl}>EILATUSH.APP</Text>
           </View>
-        </LinearGradient>
+        </View>
       </Animated.View>
     </Pressable>
   );
 }
 
-const CARD_RADIUS = 22;
+function Detail({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <View style={styles.detailCell}>
+      <Text style={styles.detailLabel}>{label}</Text>
+      <Text style={[styles.detailValue, highlight && { color: GOLD_LIGHT }]} numberOfLines={1}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+const CARD_RADIUS = 20;
 
 const styles = StyleSheet.create({
   wrap: {
@@ -193,201 +275,271 @@ const styles = StyleSheet.create({
   },
   cardAbs: {
     position: "absolute",
-    inset: 0 as any,
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    top: 0, left: 0, right: 0, bottom: 0,
     backfaceVisibility: "hidden" as any,
   },
-  card: {
+  cardInner: {
     flex: 1,
     borderRadius: CARD_RADIUS,
-    padding: 18,
+    backgroundColor: INK,
     overflow: "hidden",
-    borderWidth: 1,
-    borderColor: GOLD_DARK,
+    paddingTop: 18,
+    paddingHorizontal: 18,
+    paddingBottom: 14,
     ...Platform.select({
       ios: {
         shadowColor: "#000",
-        shadowOpacity: 0.35,
-        shadowRadius: 18,
-        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.6,
+        shadowRadius: 24,
+        shadowOffset: { width: 0, height: 14 },
       },
-      android: { elevation: 10 },
+      android: { elevation: 14 },
       default: {
         // @ts-ignore — web only
-        boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
+        boxShadow: "0 20px 40px rgba(0,0,0,0.55), 0 0 0 0.5px rgba(212,175,55,0.15)",
       },
     }),
   },
+
+  // ─── Hairline gold frames ───
+  outerHairline: {
+    position: "absolute",
+    top: 0, left: 0, right: 0, bottom: 0,
+    borderRadius: CARD_RADIUS,
+    borderWidth: 1,
+    borderColor: HAIRLINE,
+  },
+  innerHairline: {
+    position: "absolute",
+    top: 6, left: 6, right: 6, bottom: 6,
+    borderRadius: CARD_RADIUS - 6,
+    borderWidth: 0.6,
+    borderColor: HAIRLINE_SOFT,
+  },
+
+  // ─── Top row ───
   topRow: {
     flexDirection: "row-reverse",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
-    zIndex: 2,
+    zIndex: 3,
+    marginTop: 4,
   },
-  brandSmall: {
-    color: GOLD,
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 1.2,
-    textAlign: "right",
-  },
-  brandTiny: {
-    color: GOLD,
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 1.5,
-    opacity: 0.7,
-  },
-  chipText: {
-    color: "#000",
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 1.5,
-    backgroundColor: GOLD,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    overflow: "hidden" as any,
-  },
-  mascotWrap: {
-    position: "absolute",
-    bottom: -10,
-    left: -10,
-    opacity: 0.18,
-    transform: [{ rotate: "-8deg" }],
-  },
-  mascot: {
-    width: 200,
-    height: 200,
-    // @ts-ignore — RN supports tintColor on Image
-    tintColor: GOLD,
-  },
-  titleBlock: {
-    position: "absolute",
-    right: 18,
-    bottom: 56,
+  brandRight: {
     alignItems: "flex-end",
   },
-  bigTitle: {
-    color: "#FFF",
+  brandTitleHe: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+    textAlign: "right",
+  },
+  brandLine: {
+    height: 0.8,
+    width: 90,
+    backgroundColor: GOLD,
+    opacity: 0.75,
+    marginTop: 5,
+    marginBottom: 5,
+    alignSelf: "flex-end",
+  },
+  brandSub: {
+    color: GOLD,
+    fontSize: 8.5,
+    fontWeight: "700",
+    letterSpacing: 2.4,
+    opacity: 0.85,
+    textAlign: "right",
+  },
+  statusBox: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 9,
+    borderRadius: 999,
+    borderWidth: 0.8,
+    borderColor: HAIRLINE,
+    backgroundColor: "rgba(212,175,55,0.05)",
+  },
+  statusDot: {
+    width: 5, height: 5, borderRadius: 3, backgroundColor: GOLD_LIGHT,
+    ...Platform.select({
+      ios: { shadowColor: GOLD_LIGHT, shadowOpacity: 0.8, shadowRadius: 4, shadowOffset: { width: 0, height: 0 } },
+      default: { boxShadow: "0 0 6px rgba(235,200,104,0.85)" } as any,
+    }),
+  },
+  statusText: {
+    color: GOLD_LIGHT,
+    fontSize: 8.5,
+    fontWeight: "800",
+    letterSpacing: 2,
+  },
+
+  // ─── Hero dolphin ───
+  heroWrap: {
+    position: "absolute",
+    top: "50%",
+    right: "10%",
+    marginTop: -80, // center vertically (half of size=160)
+    zIndex: 2,
+    ...Platform.select({
+      ios: {
+        shadowColor: GOLD,
+        shadowOpacity: 0.45,
+        shadowRadius: 18,
+        shadowOffset: { width: 0, height: 0 },
+      },
+      default: { filter: "drop-shadow(0 0 16px rgba(212,175,55,0.4))" } as any,
+    }),
+  },
+
+  // ─── VIP plate (bottom-left) ───
+  vipPlateWrap: {
+    position: "absolute",
+    left: 22,
+    bottom: 50,
+    zIndex: 4,
+  },
+  vipPlate: {
+    borderWidth: 1,
+    borderColor: GOLD,
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: "rgba(212,175,55,0.06)",
+  },
+  vipPlateText: {
+    color: GOLD_LIGHT,
     fontSize: 26,
     fontWeight: "900",
-    letterSpacing: 0.5,
+    letterSpacing: 5,
+    lineHeight: 32,
   },
-  bigTitleGold: {
-    color: GOLD_LIGHT,
-    fontSize: 44,
-    fontWeight: "900",
-    letterSpacing: 2,
-    lineHeight: 46,
+
+  // ─── Divider & bottom row ───
+  divider: {
+    position: "absolute",
+    left: 22,
+    right: 22,
+    bottom: 38,
+    height: 0.6,
+    backgroundColor: HAIRLINE_SOFT,
   },
   bottomRow: {
     position: "absolute",
-    left: 18,
-    right: 18,
+    left: 22,
+    right: 22,
     bottom: 14,
     flexDirection: "row-reverse",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  tapHint: {
+  flipHint: {
     color: GOLD,
-    fontSize: 11,
+    fontSize: 9.5,
     opacity: 0.75,
     fontWeight: "600",
+    letterSpacing: 0.4,
   },
-  detailsBlock: {
-    marginTop: 16,
-    gap: 10,
+  appUrl: {
+    color: GOLD,
+    fontSize: 9.5,
+    fontWeight: "800",
+    letterSpacing: 2.8,
+    opacity: 0.85,
+  },
+
+  // ─── BACK ───
+  watermarkWrap: {
+    position: "absolute",
+    top: "50%",
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    transform: [{ translateY: -100 }],
+  },
+  backHeader: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 4,
+  },
+  backTitle: {
+    color: GOLD,
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 2.4,
+  },
+  backNumChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 0.8,
+    borderColor: GOLD,
+    backgroundColor: "rgba(212,175,55,0.05)",
+  },
+  backNumText: {
+    color: GOLD_LIGHT,
+    fontSize: 10.5,
+    fontWeight: "800",
+    letterSpacing: 1.5,
+  },
+  thinSep: {
+    marginTop: 10,
+    height: 0.6,
+    backgroundColor: HAIRLINE_SOFT,
+  },
+  nameRow: {
+    marginTop: 14,
+    alignItems: "flex-end",
   },
   fieldLabel: {
     color: GOLD,
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "700",
-    letterSpacing: 0.8,
+    letterSpacing: 1.5,
+    opacity: 0.85,
     textAlign: "right",
-    opacity: 0.75,
   },
-  fieldValue: {
-    color: "#FFF",
-    fontSize: 20,
+  nameValue: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "800",
+    textAlign: "right",
+    marginTop: 3,
+    letterSpacing: 0.3,
+  },
+  detailsGrid: {
+    flexDirection: "row-reverse",
+    flexWrap: "wrap",
+    marginTop: 14,
+    gap: 8,
+  },
+  detailCell: {
+    flexBasis: "47%",
+    flexGrow: 1,
+    borderWidth: 0.6,
+    borderColor: HAIRLINE_SOFT,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: INK_2,
+  },
+  detailLabel: {
+    color: GOLD,
+    fontSize: 8.5,
+    fontWeight: "700",
+    letterSpacing: 1.2,
+    opacity: 0.85,
+    textAlign: "right",
+  },
+  detailValue: {
+    color: "#fff",
+    fontSize: 13,
     fontWeight: "800",
     textAlign: "right",
     marginTop: 2,
-  },
-  fieldValueSm: {
-    color: "#FFF",
-    fontSize: 14,
-    fontWeight: "700",
-    textAlign: "right",
-    marginTop: 2,
-  },
-  row2: {
-    flexDirection: "row-reverse",
-    gap: 14,
-    marginTop: 8,
-  },
-  // Decorative gold lines (clipped by overflow:hidden of card)
-  line: {
-    position: "absolute",
-    backgroundColor: GOLD,
-    opacity: 0.45,
-  },
-  lineTopRight: {
-    top: 30,
-    right: -20,
-    width: 120,
-    height: 1.2,
-    transform: [{ rotate: "35deg" }],
-  },
-  lineMidRight: {
-    top: 60,
-    right: -30,
-    width: 90,
-    height: 1,
-    transform: [{ rotate: "35deg" }],
-    opacity: 0.25,
-  },
-  lineBotLeft: {
-    bottom: 40,
-    left: -30,
-    width: 140,
-    height: 1.2,
-    transform: [{ rotate: "35deg" }],
-  },
-  lineMidLeft: {
-    bottom: 80,
-    left: -20,
-    width: 80,
-    height: 1,
-    transform: [{ rotate: "35deg" }],
-    opacity: 0.25,
-  },
-  cornerTL: {
-    position: "absolute",
-    top: 10,
-    left: 10,
-    width: 24,
-    height: 24,
-    borderTopWidth: 2,
-    borderLeftWidth: 2,
-    borderColor: GOLD,
-    opacity: 0.7,
-    borderTopLeftRadius: 6,
-  },
-  cornerBR: {
-    position: "absolute",
-    bottom: 36,
-    right: 10,
-    width: 24,
-    height: 24,
-    borderBottomWidth: 2,
-    borderRightWidth: 2,
-    borderColor: GOLD,
-    opacity: 0.7,
-    borderBottomRightRadius: 6,
   },
 });

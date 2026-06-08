@@ -82,10 +82,13 @@ export default function VIPTabScreen() {
           <View style={styles.previewHeader}>
             <Text style={styles.eyebrow}>המועדון לתושבי אילת</Text>
             <Text style={styles.h1}>תושב אילת <Text style={{ color: "#D4AF37" }}>VIP</Text></Text>
+            <View style={styles.headerUnderline} />
           </View>
 
-          <View style={styles.cardWrap}>
-            <VIPCard preview interactive />
+          <View style={styles.cardStage}>
+            <View style={styles.cardWrap}>
+              <VIPCard preview interactive />
+            </View>
           </View>
 
           <View style={styles.benefitsBox}>
@@ -161,13 +164,15 @@ export default function VIPTabScreen() {
           </Pressable>
         </View>
 
-        <View style={styles.cardWrap}>
-          <VIPCard
-            fullName={member.full_name}
-            dob={member.dob}
-            memberNumber={member.member_number}
-            expiryDate={member.expiry_date}
-          />
+        <View style={styles.cardStage}>
+          <View style={styles.cardWrap}>
+            <VIPCard
+              fullName={member.full_name}
+              dob={member.dob}
+              memberNumber={member.member_number}
+              expiryDate={member.expiry_date}
+            />
+          </View>
         </View>
 
         <View style={styles.discountsHeader}>
@@ -204,6 +209,14 @@ const styles = StyleSheet.create({
   scroll: { padding: SPACING.md, paddingBottom: 32 },
 
   previewHeader: { alignItems: "flex-end", marginBottom: 14 },
+  headerUnderline: {
+    height: 1.2,
+    width: 60,
+    backgroundColor: "#D4AF37",
+    opacity: 0.85,
+    marginTop: 6,
+    alignSelf: "flex-end",
+  },
   memberHeader: {
     flexDirection: "row-reverse",
     alignItems: "center",
@@ -214,7 +227,13 @@ const styles = StyleSheet.create({
   h1: { fontSize: 32, fontWeight: "900", color: COLORS.textPrimary, textAlign: "right", marginTop: 4 },
   h2: { fontSize: 22, fontWeight: "900", color: COLORS.textPrimary, textAlign: "right", marginTop: 2 },
 
-  cardWrap: { marginVertical: 14 },
+  cardStage: {
+    marginVertical: 18,
+    paddingVertical: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cardWrap: { width: "100%", maxWidth: 380, alignSelf: "center" },
 
   benefitsBox: {
     marginTop: 18,
