@@ -358,9 +358,17 @@ export default function EilatushScreen() {
             <View style={styles.mascot}>
               <Image source={MASCOT_IMG} style={styles.mascotImg} resizeMode="contain" />
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.headerTitle}>אילתוש</Text>
-              <Text style={styles.headerSub}>העוזרת המקומית שלך · תמיד כאן</Text>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text
+                style={styles.headerTitle}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.5}
+                allowFontScaling={false}
+              >
+                אילתוש
+              </Text>
+              <Text style={styles.headerSub} numberOfLines={1}>העוזרת המקומית שלך · תמיד כאן</Text>
             </View>
             <View style={styles.headerActions}>
               <Pressable
