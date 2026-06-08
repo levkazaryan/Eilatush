@@ -2,13 +2,11 @@
 
 import React from "react";
 import { Tabs } from "expo-router";
-import { View, Text, StyleSheet, Platform, Image } from "react-native";
+import { View, Text, StyleSheet, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS } from "../../theme";
 
 type IconName = React.ComponentProps<typeof Ionicons>["name"];
-
-const EILATUSH_MASCOT = require("../../assets/images/eilatush-mascot.png");
 
 function TabIcon({ focused, name, label, testID }: { focused: boolean; name: IconName; label: string; testID: string }) {
   return (
@@ -16,6 +14,22 @@ function TabIcon({ focused, name, label, testID }: { focused: boolean; name: Ico
       <Ionicons name={name} size={22} color={focused ? COLORS.primary : COLORS.textMuted} />
       <Text style={[styles.tabLabel, { color: focused ? COLORS.primary : COLORS.textMuted }]} numberOfLines={1}>
         {label}
+      </Text>
+    </View>
+  );
+}
+
+function VIPTabIcon({ focused }: { focused: boolean }) {
+  return (
+    <View style={styles.centerItem} testID="tab-vip">
+      <View style={[styles.vipBubble, focused && styles.vipBubbleActive]}>
+        <Ionicons name="diamond" size={26} color={focused ? "#000" : "#000"} />
+      </View>
+      <Text
+        numberOfLines={1}
+        style={[styles.tabLabel, styles.centerLabel, { color: focused ? "#A57C1B" : COLORS.textMuted }]}
+      >
+        VIP
       </Text>
     </View>
   );
@@ -58,24 +72,10 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="eilatush"
+        name="vip"
         options={{
-          title: "אילתוש",
-          tabBarIcon: ({ focused }) => (
-            <View style={styles.centerItem} testID="tab-eilatush">
-              <Image
-                source={EILATUSH_MASCOT}
-                style={[styles.centerMascotImg, focused && styles.centerMascotImgActive]}
-                resizeMode="contain"
-              />
-              <Text
-                numberOfLines={1}
-                style={[styles.tabLabel, styles.centerLabel, { color: focused ? COLORS.primary : COLORS.textMuted }]}
-              >
-                אילתוש
-              </Text>
-            </View>
-          ),
+          title: "VIP",
+          tabBarIcon: ({ focused }) => <VIPTabIcon focused={focused} />,
         }}
       />
       <Tabs.Screen
@@ -100,6 +100,9 @@ export default function TabsLayout() {
   );
 }
 
+const GOLD = "#D4AF37";
+const GOLD_LIGHT = "#F2D785";
+
 const styles = StyleSheet.create({
   tabItem: {
     alignItems: "center",
@@ -115,46 +118,37 @@ const styles = StyleSheet.create({
   centerItem: {
     alignItems: "center",
     justifyContent: "center",
-    marginTop: -24,
-    minWidth: 80,   // ensure label never wraps regardless of parent width
+    marginTop: -22,
+    minWidth: 80,
   },
   centerLabel: {
-    // The new bubble mascot fills its canvas, so we push the label DOWN
-    // (instead of negative margin) to keep clear separation between the
-    // bubble and the "אילתוש" text.
     marginTop: 2,
     paddingHorizontal: 4,
     includeFontPadding: false as any,
+    fontWeight: "900",
+    letterSpacing: 1.2,
   },
-  centerBubble: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: COLORS.primary,
+  vipBubble: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: GOLD,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: COLORS.primary,
-    shadowOpacity: 0.45,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
     borderWidth: 3,
     borderColor: "#FFFFFF",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOpacity: 0.35,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 4 },
+      },
+      android: { elevation: 8 },
+      default: { boxShadow: "0 4px 14px rgba(212,175,55,0.55)" } as any,
+    }),
   },
-  centerBubbleActive: {
-    backgroundColor: COLORS.primaryHover,
-  },
-  centerMascotWrap: {
-    // deprecated — kept for backward-compat in case anything still imports it
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  centerMascotWrapActive: {},
-  centerMascotImg: {
-    width: 68,
-    height: 68,
-  },
-  centerMascotImgActive: {
-    transform: [{ scale: 1.08 }],
+  vipBubbleActive: {
+    backgroundColor: GOLD_LIGHT,
   },
 });

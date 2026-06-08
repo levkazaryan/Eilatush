@@ -1,14 +1,16 @@
 'use client';
 
-import { useEffect, useState } from "react";
-import { Stack } from "expo-router";
-import { I18nManager, LogBox, Platform } from "react-native";
+import React, { useEffect, useState } from "react";
+import { Stack, usePathname } from "expo-router";
+import { I18nManager, LogBox, Platform, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { COLORS } from "../theme";
 import { trackAppOpen } from "../utils/analytics";
 import { checkForUpdate, type UpdateDecision } from "../utils/version-check";
 import UpdateModal from "../components/UpdateModal";
 import PWAInstallBanner from "../components/PWAInstallBanner";
+import FloatingChatBubble from "../components/FloatingChatBubble";
+import { AuthProvider } from "../utils/auth-context";
 
 // Silence noisy dev-only warnings that overlay the UI in Expo Go
 LogBox.ignoreLogs([
@@ -33,6 +35,7 @@ if (Platform.OS !== "web") {
 
 export default function RootLayout() {
   const [updateDecision, setUpdateDecision] = useState<UpdateDecision>({ kind: "none" });
+  const pathname = usePathname();
 
   useEffect(() => {
     if (Platform.OS === "web" && typeof document !== "undefined") {
@@ -44,14 +47,12 @@ export default function RootLayout() {
     trackAppOpen();
 
     // Check for app update — non-blocking, runs in background.
-    // If a newer version is available we surface a friendly modal.
     let cancelled = false;
     (async () => {
       try {
         const decision = await checkForUpdate();
         if (!cancelled) setUpdateDecision(decision);
       } catch (e) {
-        // Silent — never block the app for update-check failures
         console.warn("update check failed", e);
       }
     })();
@@ -60,8 +61,12 @@ export default function RootLayout() {
     };
   }, []);
 
+  // Don't show the floating chat bubble on auth screens or on /chat itself
+  const hideBubbleOn = ["/chat", "/vip-register", "/vip-login"];
+  const showBubble = !hideBubbleOn.includes(pathname || "");
+
   return (
-    <>
+    <AuthProvider>
       <StatusBar style="dark" />
       <Stack
         screenOptions={{
@@ -69,12 +74,12 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: COLORS.bg },
         }}
       />
+      {showBubble && <FloatingChatBubble />}
       <UpdateModal
         decision={updateDecision}
         onDismiss={() => setUpdateDecision({ kind: "none" })}
       />
-      {/* PWA install banner — auto-hides on native, only renders on web */}
       <PWAInstallBanner />
-    </>
+    </AuthProvider>
   );
 }

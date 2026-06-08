@@ -1535,6 +1535,14 @@ async def seed_data():
 
 app.include_router(api_router)
 
+# ---------------------------------------------------------------------------
+# VIP Membership module (תושב אילת VIP)
+# ---------------------------------------------------------------------------
+from vip import build_vip_router, init_vip_collections
+vip_router = build_vip_router(db)
+# Mount under /api/vip via the api_router prefix style
+app.include_router(vip_router, prefix="/api")
+
 
 # ---------------------------------------------------------------------------
 # Admin: trigger event dedup on demand (idempotent, safe to call anytime)
@@ -1567,6 +1575,12 @@ logger = logging.getLogger(__name__)
 @app.on_event("startup")
 async def on_startup():
     await seed_data()
+    # Initialize VIP collections (indexes + seed 8 Ice Mall discounts)
+    try:
+        await init_vip_collections(db)
+        logger.info("VIP collections initialized")
+    except Exception as e:
+        logger.exception("VIP init failed (non-fatal): %s", e)
     # Clear legacy demo news once (ids are UUID format). Real scraped articles
     # have deterministic sha1-based ids of 20 hex chars.
     try:

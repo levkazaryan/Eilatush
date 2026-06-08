@@ -21,12 +21,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useFocusEffect } from "expo-router";
-import { api } from "../../api";
-import { COLORS, RADIUS, SPACING } from "../../theme";
-import { EventCard, BusinessCard, JobCard, NewsCard } from "../../components";
-import { trackScreen } from "../../utils/analytics";
+import { api } from "../api";
+import { COLORS, RADIUS, SPACING } from "../theme";
+import { EventCard, BusinessCard, JobCard, NewsCard } from "../components";
+import { trackScreen } from "../utils/analytics";
 
-const MASCOT_IMG = require("../../assets/images/eilatush-mascot.png");
+const MASCOT_IMG = require("../assets/images/eilatush-mascot.png");
 
 type ResultItem =
   | { type: "event"; item: any }
@@ -371,6 +371,17 @@ export default function EilatushScreen() {
               <Text style={styles.headerSub} numberOfLines={1}>העוזרת המקומית שלך · תמיד כאן</Text>
             </View>
             <View style={styles.headerActions}>
+              <Pressable
+                onPress={() => router.back()}
+                style={({ pressed }) => [
+                  styles.headerIconBtn,
+                  pressed && { opacity: 0.6 },
+                ]}
+                accessibilityLabel="חזרה"
+                testID="header-close"
+              >
+                <Ionicons name="close" size={20} color={COLORS.primary} />
+              </Pressable>
               <Pressable
                 onPress={clearChat}
                 style={({ pressed }) => [

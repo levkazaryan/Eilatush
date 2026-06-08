@@ -451,3 +451,82 @@ export const formatJobPosted = (iso: string): string => {
 };
 
 export const isWeb = Platform.OS === "web";
+
+// ---------------------------------------------------------------------------
+// VIP Membership API (תושב אילת VIP)
+// ---------------------------------------------------------------------------
+export type VIPMember = {
+  id: string;
+  full_name: string;
+  email: string;
+  phone: string;
+  dob: string;
+  address: string;
+  member_number: string;
+  join_date: string;
+  expiry_date: string;
+  is_active: boolean;
+};
+
+export type VIPDiscount = {
+  id: string;
+  place: string;
+  business_name: string;
+  gift_text: string;
+  age_restriction?: string | null;
+  category?: string | null;
+  image_url?: string | null;
+  order: number;
+  active: boolean;
+};
+
+export type VIPAuthResponse = { token: string; member: VIPMember };
+
+async function vipFetch(path: string, init: RequestInit = {}, token?: string | null) {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...((init.headers as Record<string, string>) || {}),
+  };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(`${API}/api/vip${path}`, { ...init, headers });
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const j = await res.json();
+      detail = j?.detail || detail;
+    } catch {
+      // ignore
+    }
+    const err: any = new Error(detail);
+    err.status = res.status;
+    throw err;
+  }
+  return res.json();
+}
+
+export const vipApi = {
+  async teaser(): Promise<{ discount_count: number }> {
+    return vipFetch("/teaser", { method: "GET" });
+  },
+  async register(payload: {
+    full_name: string;
+    email: string;
+    phone: string;
+    dob: string;
+    address: string;
+  }): Promise<VIPAuthResponse> {
+    return vipFetch("/register", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+  async login(payload: { phone: string; dob: string }): Promise<VIPAuthResponse> {
+    return vipFetch("/login", { method: "POST", body: JSON.stringify(payload) });
+  },
+  async me(token: string): Promise<VIPMember> {
+    return vipFetch("/me", { method: "GET" }, token);
+  },
+  async discounts(token: string): Promise<VIPDiscount[]> {
+    return vipFetch("/discounts", { method: "GET" }, token);
+  },
+};
