@@ -20,7 +20,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { api } from "../../api";
 import { COLORS, RADIUS, SPACING } from "../../theme";
 import { EventCard, BusinessCard, JobCard, NewsCard } from "../../components";
@@ -150,6 +150,33 @@ export default function EilatushScreen() {
   const [loading, setLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  const didInitialScrollRef = useRef(false);
+
+  // Scroll to bottom on initial hydration (so user lands on latest message)
+  useEffect(() => {
+    if (!hydrated || didInitialScrollRef.current) return;
+    // Multiple frames to ensure ScrollView has measured its content
+    const t1 = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 0);
+    const t2 = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 100);
+    const t3 = setTimeout(() => {
+      scrollRef.current?.scrollToEnd({ animated: false });
+      didInitialScrollRef.current = true;
+    }, 300);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [hydrated]);
+
+  // Scroll to bottom every time user returns to this tab
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!hydrated) return;
+      const t = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 50);
+      return () => clearTimeout(t);
+    }, [hydrated])
+  );
 
   // ---- persistence ----
   useEffect(() => {
