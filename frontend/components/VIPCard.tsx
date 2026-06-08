@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from "react";
-import { View, Text, StyleSheet, Pressable, Animated, Platform, Easing } from "react-native";
-import Svg, { Path, Defs, LinearGradient as SvgGradient, Stop, G } from "react-native-svg";
+import { View, Text, StyleSheet, Pressable, Animated, Platform, Easing, Image } from "react-native";
+
+// Premium gold dolphin asset (user-provided)
+const DOLPHIN_IMG = require("../assets/images/gold-dolphin.png");
 
 // ───── Premium palette: matte black + hairline gold ─────
 const GOLD = "#D4AF37";          // primary gold
 const GOLD_LIGHT = "#EBC868";    // highlight
-const GOLD_DEEP = "#9A7A1F";     // shadow gold
 const INK = "#0A0A0B";           // matte black
 const HAIRLINE = "rgba(212,175,55,0.55)"; // thin gold line
 const HAIRLINE_SOFT = "rgba(212,175,55,0.25)"; // softer thin gold
@@ -48,35 +49,17 @@ function formatExpiry(iso?: string): string {
   }
 }
 
-// ───── Dolphin SVG (game-icons via Iconify, verified elegant leaping silhouette) ─────
+// ───── Dolphin (gold image, user-provided premium asset) ─────
 function Dolphin({
   size = 120,
   opacity = 1,
-  gradient = true,
 }: { size?: number; opacity?: number; gradient?: boolean }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 512 512" fill="none">
-      <Defs>
-        <SvgGradient id="dolphinGold" x1="0" y1="0" x2="1" y2="1">
-          <Stop offset="0" stopColor={GOLD_LIGHT} stopOpacity={1} />
-          <Stop offset="0.5" stopColor={GOLD} stopOpacity={1} />
-          <Stop offset="1" stopColor={GOLD_DEEP} stopOpacity={1} />
-        </SvgGradient>
-      </Defs>
-      <G opacity={opacity}>
-        {/* Main dolphin body (leaping) */}
-        <Path
-          d="M123.22 47.23c29.498 15.152 55.025 36.05 55.53 67.366c-93.62 83.867-83.862 179.356-97.002 270.34c-67.68 55.552-67.57 90.948-60.9 101.227c3.94.743 29.11-25.94 48.326-30.397c14.23-4.094 12.284-15.99 16.273-25.275c2.438 14.55 7.17 22.612 17.133 25.485c12.874 3.36 44.932 28.15 51.53 25.504c1.374-20.382-26.01-63.854-48.028-90.087c41.012-63.28 81.365-136.458 211.162-207.77c-3.21-3.706-6.216-6.45-8.8-7.986l9.198-15.472c11.617 6.907 20.522 19.56 29.248 35.033c5.94 10.532 11.528 22.644 16.96 35.117c15.682-32.87 22.983-66.406 16.402-90.254l17.35-4.786a87 87 0 0 1 1.927 8.83c33.29-4.253 55.718-13.083 85.11-29.322c3.744-2.068 19.054-13.012-.117-16.03c12.62-9.017 7.54-12.063 1.973-15.152c-6.486-3.6-20.302-8.948-35.758-8.556c-12.124-27.863-39.63-47.772-82.225-47.696c-28.532.052-63.842 9.086-105.828 30.688C217.895 27.64 164.92 20.468 123.22 47.23"
-          fill={gradient ? "url(#dolphinGold)" : GOLD}
-        />
-        {/* Eye */}
-        <Path
-          d="M410.162 75.97a9 9 0 1 1 0 18a9 9 0 0 1 0-18"
-          fill={gradient ? INK : INK}
-          opacity={gradient ? 1 : 0.5}
-        />
-      </G>
-    </Svg>
+    <Image
+      source={DOLPHIN_IMG}
+      style={{ width: size, height: size, opacity }}
+      resizeMode="contain"
+    />
   );
 }
 
@@ -233,12 +216,10 @@ export default function VIPCard({
             <Text style={styles.nameValue} numberOfLines={1}>{displayName}</Text>
           </View>
 
-          {/* Details grid */}
+          {/* Details grid — only DOB and Expiry */}
           <View style={styles.detailsGrid}>
             <Detail label="תאריך לידה" value={displayDob} />
             <Detail label="תקף עד" value={displayExpiry} highlight />
-            <Detail label="סטטוס" value="פעיל" highlight />
-            <Detail label="חברות" value="6 חודשים" />
           </View>
 
           {/* Bottom row — in normal flow, pushed to bottom */}
