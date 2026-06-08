@@ -145,7 +145,7 @@ export default function Root({ children }: PropsWithChildren) {
           backgroundColor: "#F7F8FA",
         }}
       >
-        {/* Service Worker registration — quietly registers SW for offline + install prompts */}
+        {/* Service Worker registration with auto-update (skipWaiting + reload on new SW) */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -153,11 +153,37 @@ export default function Root({ children }: PropsWithChildren) {
                 window.addEventListener('load', function() {
                   navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
                     .then(function(reg) {
-                      // console.log('[Eilatush] SW registered:', reg.scope);
+                      // Force-check for updates immediately on every page load
+                      try { reg.update(); } catch (_) {}
+
+                      // If there is already a waiting worker (new SW ready), activate it now
+                      if (reg.waiting) {
+                        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                      }
+
+                      // Listen for new SW installing
+                      reg.addEventListener('updatefound', function() {
+                        var newSW = reg.installing;
+                        if (!newSW) return;
+                        newSW.addEventListener('statechange', function() {
+                          if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+                            // A new SW is installed and there's an old one controlling — switch over
+                            newSW.postMessage({ type: 'SKIP_WAITING' });
+                          }
+                        });
+                      });
                     })
                     .catch(function(err) {
                       console.warn('[Eilatush] SW registration failed:', err);
                     });
+
+                  // When the controller changes (new SW takes over), reload to get fresh assets
+                  var refreshing = false;
+                  navigator.serviceWorker.addEventListener('controllerchange', function() {
+                    if (refreshing) return;
+                    refreshing = true;
+                    window.location.reload();
+                  });
                 });
               }
 
