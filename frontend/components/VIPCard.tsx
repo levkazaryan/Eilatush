@@ -9,7 +9,6 @@ const GOLD = "#D4AF37";          // primary gold
 const GOLD_LIGHT = "#EBC868";    // highlight
 const GOLD_DEEP = "#9A7A1F";     // shadow gold
 const INK = "#0A0A0B";           // matte black
-const INK_2 = "#111114";         // softer matte for subtle layering
 const HAIRLINE = "rgba(212,175,55,0.55)"; // thin gold line
 const HAIRLINE_SOFT = "rgba(212,175,55,0.25)"; // softer thin gold
 
@@ -202,7 +201,7 @@ export default function VIPCard({
           { transform: [{ perspective: 1200 }, { rotateY: backRotate }], opacity: backOpacity },
         ]}
       >
-        <View style={styles.cardInner}>
+        <View style={[styles.cardInner, styles.backInner]}>
           {/* Same hairline frame */}
           <View pointerEvents="none" style={styles.outerHairline} />
           <View pointerEvents="none" style={styles.innerHairline} />
@@ -212,9 +211,9 @@ export default function VIPCard({
           <CornerOrn position="bl" />
           <CornerOrn position="br" />
 
-          {/* Dolphin watermark (very low opacity) — center */}
+          {/* Dolphin watermark (very subtle) — center */}
           <View pointerEvents="none" style={styles.watermarkWrap}>
-            <Dolphin size={200} opacity={0.08} gradient={false} />
+            <Dolphin size={180} opacity={0.04} gradient={false} />
           </View>
 
           {/* Header strip */}
@@ -242,8 +241,8 @@ export default function VIPCard({
             <Detail label="חברות" value="6 חודשים" />
           </View>
 
-          {/* Bottom row */}
-          <View style={styles.bottomRow}>
+          {/* Bottom row — in normal flow, pushed to bottom */}
+          <View style={styles.backBottomRow}>
             <Text style={styles.flipHint}>↻ חזרה לחזית</Text>
             <Text style={styles.appUrl}>EILATUSH.APP</Text>
           </View>
@@ -452,19 +451,23 @@ const styles = StyleSheet.create({
   },
 
   // ─── BACK ───
+  backInner: {
+    paddingTop: 14,
+    paddingBottom: 12,
+  },
   watermarkWrap: {
     position: "absolute",
     top: "50%",
     left: 0,
     right: 0,
     alignItems: "center",
-    transform: [{ translateY: -100 }],
+    transform: [{ translateY: -90 }],
   },
   backHeader: {
     flexDirection: "row-reverse",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 4,
+    marginTop: 2,
   },
   backTitle: {
     color: GOLD,
@@ -487,12 +490,12 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
   },
   thinSep: {
-    marginTop: 10,
+    marginTop: 8,
     height: 0.6,
     backgroundColor: HAIRLINE_SOFT,
   },
   nameRow: {
-    marginTop: 14,
+    marginTop: 8,
     alignItems: "flex-end",
   },
   fieldLabel: {
@@ -505,17 +508,17 @@ const styles = StyleSheet.create({
   },
   nameValue: {
     color: "#FFFFFF",
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "800",
     textAlign: "right",
-    marginTop: 3,
+    marginTop: 2,
     letterSpacing: 0.3,
   },
   detailsGrid: {
     flexDirection: "row-reverse",
     flexWrap: "wrap",
-    marginTop: 14,
-    gap: 8,
+    marginTop: 10,
+    gap: 6,
   },
   detailCell: {
     flexBasis: "47%",
@@ -523,9 +526,9 @@ const styles = StyleSheet.create({
     borderWidth: 0.6,
     borderColor: HAIRLINE_SOFT,
     borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: INK_2,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    backgroundColor: "rgba(17,17,20,0.85)",
   },
   detailLabel: {
     color: GOLD,
@@ -537,9 +540,16 @@ const styles = StyleSheet.create({
   },
   detailValue: {
     color: "#fff",
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: "800",
     textAlign: "right",
-    marginTop: 2,
+    marginTop: 1,
+  },
+  backBottomRow: {
+    marginTop: "auto",
+    paddingTop: 8,
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
 });
