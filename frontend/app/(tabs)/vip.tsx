@@ -94,7 +94,7 @@ export default function VIPTabScreen() {
           <View style={styles.benefitsBox}>
             <Text style={styles.benefitsTitle}>למה זה שווה?</Text>
             <Text style={styles.benefitsText}>
-              הכרטיס הראשון באילת שמעניק לתושבי העיר הטבות בלעדיות אצל העסקים האהובים עליכם.{"\n\n"}מתנות והנחות במסעדות, בתי קפה, חנויות, אטרקציות ועוד — בלי הגרלות ובלי תנאים מסובכים.
+              כרטיס ה-VIP הראשון של תושבי אילת — הטבות בלעדיות אצל העסקים האהובים עליכם, ובקרוב גם מחוץ לעיר.{"\n\n"}מתנות והנחות במסעדות, בתי קפה, חנויות, אטרקציות ועוד — בלי הגרלות ובלי תנאים מסובכים.
             </Text>
             <View style={styles.bulletsRow}>
               <View style={styles.bullet}>
