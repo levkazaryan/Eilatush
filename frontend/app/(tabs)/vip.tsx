@@ -92,18 +92,18 @@ export default function VIPTabScreen() {
           </View>
 
           <View style={styles.benefitsBox}>
-            <Text style={styles.benefitsTitle}>מה זה נותן?</Text>
+            <Text style={styles.benefitsTitle}>למה זה שווה?</Text>
             <Text style={styles.benefitsText}>
-              כרטיס המענק הטבות הבלעדית הראשונה באילת לתושבי העיר בלבד. {"\n\n"}מקבלים מתנות והטבות במסעדות, ביתי קפה, אטרקציות, חנויות ועוד — כל העסקים שאתם אוהבים בעיר.
+              הכרטיס הראשון באילת שמעניק לתושבי העיר הטבות בלעדיות אצל העסקים האהובים עליכם.{"\n\n"}מתנות והנחות במסעדות, בתי קפה, חנויות, אטרקציות ועוד — בלי הגרלות ובלי תנאים מסובכים.
             </Text>
             <View style={styles.bulletsRow}>
               <View style={styles.bullet}>
                 <Text style={styles.bulletNum}>🎁</Text>
-                <Text style={styles.bulletText}>{teaserCount} הטבות מהיום הראשון</Text>
+                <Text style={styles.bulletText}>{teaserCount} הטבות {"\n"}מחכות לכם</Text>
               </View>
               <View style={styles.bullet}>
                 <Text style={styles.bulletNum}>🆕</Text>
-                <Text style={styles.bulletText}>כל שבוע מתעדכן {"\n"}עם הטבות חדשות</Text>
+                <Text style={styles.bulletText}>כל שבוע {"\n"}מתווספות חדשות</Text>
               </View>
               <View style={styles.bullet}>
                 <Text style={styles.bulletNum}>🌍</Text>
@@ -113,8 +113,8 @@ export default function VIPTabScreen() {
           </View>
 
           <View style={styles.freeBox}>
-            <Text style={styles.freeBoxTitle}>הכל בחינם, לששה חודשים</Text>
-            <Text style={styles.freeBoxText}>ללא פרטי אשראי · ללא מחויבות · ביטול בכל רגע</Text>
+            <Text style={styles.freeBoxTitle}>חצי שנה במתנה — בלי שום עלות</Text>
+            <Text style={styles.freeBoxText}>בלי כרטיס אשראי · בלי התחייבות · אפשר לבטל מתי שרוצים</Text>
           </View>
 
           <Pressable
@@ -131,11 +131,11 @@ export default function VIPTabScreen() {
             style={({ pressed }) => [styles.loginLink, pressed && { opacity: 0.6 }]}
             testID="vip-login-link"
           >
-            <Text style={styles.loginLinkText}>כבר יש לך כרטיס? <Text style={{ color: COLORS.primary, fontWeight: "800" }}>התחבר</Text></Text>
+            <Text style={styles.loginLinkText}>כבר יש לכם כרטיס? <Text style={{ color: COLORS.primary, fontWeight: "800" }}>התחברו</Text></Text>
           </Pressable>
 
           <Text style={styles.disclaimer}>
-            הערה: הכרטיס משמש את המקבלים בעסקים המשתתפים בלבד. הצגת הכרטיס בעסק = מימוש ההטבה.
+            הכרטיס תקף רק בעסקים המשתתפים. כדי לממש את ההטבה — פשוט הציגו את הכרטיס בקופה לפני התשלום.
           </Text>
         </ScrollView>
       </SafeAreaView>
@@ -152,12 +152,12 @@ export default function VIPTabScreen() {
         <View style={styles.memberHeader}>
           <View style={{ flex: 1 }}>
             <Text style={styles.eyebrow}>שלום, {member.full_name.split(" ")[0]} 👋</Text>
-            <Text style={styles.h2}>הכרטיס הדיגיטלי שלך</Text>
+            <Text style={styles.h2}>הכרטיס הדיגיטלי שלכם</Text>
           </View>
           <Pressable
             onPress={logout}
             style={({ pressed }) => [styles.iconBtnGhost, pressed && { opacity: 0.6 }]}
-            accessibilityLabel="התנתק"
+            accessibilityLabel="התנתקות"
             testID="vip-logout"
           >
             <Ionicons name="log-out-outline" size={20} color={COLORS.textSecondary} />
@@ -176,14 +176,14 @@ export default function VIPTabScreen() {
         </View>
 
         <View style={styles.discountsHeader}>
-          <Text style={styles.discountsTitle}>🎁 הטבות הזמינות לך</Text>
-          <Text style={styles.discountsSub}>למימוש — הציגו את הכרטיס בעסק</Text>
+          <Text style={styles.discountsTitle}>🎁 ההטבות שלכם</Text>
+          <Text style={styles.discountsSub}>כדי לממש — פשוט הציגו את הכרטיס בקופה</Text>
         </View>
 
         {loadingDiscounts ? (
           <ActivityIndicator color={COLORS.primary} size="small" style={{ marginVertical: 30 }} />
         ) : (discounts || []).length === 0 ? (
-          <Text style={styles.empty}>בקרוב יהיו כאן הטבות ✌️</Text>
+          <Text style={styles.empty}>ההטבות יופיעו כאן בקרוב ✌️</Text>
         ) : (
           <View>
             {(discounts || []).map((d) => (
@@ -193,8 +193,8 @@ export default function VIPTabScreen() {
         )}
 
         <View style={styles.comingSoon}>
-          <Text style={styles.comingSoonTitle}>🌍 הטבות מחוץ לאילת</Text>
-          <Text style={styles.comingSoonText}>בקרוב… אנו עובדים קשה להביא לכם הטבות גם מחוץ לעיר 🙏</Text>
+          <Text style={styles.comingSoonTitle}>🌍 גם מחוץ לאילת — בקרוב</Text>
+          <Text style={styles.comingSoonText}>אנחנו עובדים על זה — בקרוב תוכלו ליהנות מהטבות גם בערים נוספות בארץ 🙏</Text>
         </View>
 
         <View style={{ height: 120 }} />
