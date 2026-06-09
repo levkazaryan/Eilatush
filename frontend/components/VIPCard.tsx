@@ -459,7 +459,7 @@ const styles = StyleSheet.create({
     transform: [{ translateY: -90 }],
   },
   backHeader: {
-    flexDirection: "row-reverse",
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginTop: 2,
@@ -469,6 +469,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "900",
     letterSpacing: 2.4,
+    textAlign: "right",
   },
   backNumChip: {
     paddingHorizontal: 10,
@@ -491,7 +492,7 @@ const styles = StyleSheet.create({
   },
   nameRow: {
     marginTop: 8,
-    alignItems: "flex-end",
+    alignItems: "flex-start",
   },
   fieldLabel: {
     color: GOLD,
