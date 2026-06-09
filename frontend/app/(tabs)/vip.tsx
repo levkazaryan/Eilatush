@@ -98,16 +98,16 @@ export default function VIPTabScreen() {
             </Text>
             <View style={styles.bulletsRow}>
               <View style={styles.bullet}>
-                <Text style={styles.bulletNum}>🎁</Text>
-                <Text style={styles.bulletText}>{teaserCount} הטבות {"\n"}מחכות לכם</Text>
+                <Text style={styles.bulletNum}>🌍</Text>
+                <Text style={styles.bulletText}>גם מחוץ לאילת {"\n"}<Text style={{ color: COLORS.textMuted, fontWeight: "600" }}>(בקרוב)</Text></Text>
               </View>
               <View style={styles.bullet}>
                 <Text style={styles.bulletNum}>🆕</Text>
                 <Text style={styles.bulletText}>כל שבוע {"\n"}מתווספות חדשות</Text>
               </View>
               <View style={styles.bullet}>
-                <Text style={styles.bulletNum}>🌍</Text>
-                <Text style={styles.bulletText}>גם מחוץ לאילת {"\n"}<Text style={{ color: COLORS.textMuted, fontWeight: "600" }}>(בקרוב)</Text></Text>
+                <Text style={styles.bulletNum}>🎁</Text>
+                <Text style={styles.bulletText}>{teaserCount} הטבות {"\n"}מחכות לכם</Text>
               </View>
             </View>
           </View>
