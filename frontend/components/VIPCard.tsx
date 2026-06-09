@@ -119,7 +119,7 @@ export default function VIPCard({
 
   return (
     <Pressable onPress={handlePress} style={styles.wrap} accessibilityLabel="כרטיס VIP — לחץ להפיכה">
-      {/* ╔══════════════ FRONT ══════════════╗ */}
+      {/* ╔══════════════ FRONT (user-designed image) ══════════════╗ */}
       <Animated.View
         pointerEvents={flipped ? "none" : "auto"}
         style={[
@@ -128,51 +128,18 @@ export default function VIPCard({
         ]}
       >
         <View style={styles.cardInner}>
-          {/* Outer hairline gold frame */}
-          <View pointerEvents="none" style={styles.outerHairline} />
-          {/* Inner hairline (a touch in) */}
-          <View pointerEvents="none" style={styles.innerHairline} />
-
-          {/* Corner ornaments */}
-          <CornerOrn position="tl" />
-          <CornerOrn position="tr" />
-          <CornerOrn position="bl" />
-          <CornerOrn position="br" />
-
-          {/* ─── Top row: brand wordmark (RTL: brand right, status left) ─── */}
-          <View style={styles.topRow}>
-            <View style={styles.brandRight}>
-              <Text style={styles.brandTitleHe}>תושב אילת</Text>
-              <View style={styles.brandLine} />
-              <Text style={styles.brandSub}>EILAT RESIDENT · VIP</Text>
+          {/* Pre-designed VIP card front image */}
+          <Image
+            source={require("../assets/images/vip-card-front.png")}
+            style={styles.cardFrontImg}
+            resizeMode="cover"
+          />
+          {/* Bottom-left flip hint overlay (kept exactly as before) */}
+          {interactive ? (
+            <View style={styles.flipHintWrap} pointerEvents="none">
+              <Text style={styles.flipHintOnImg}>↻ לחצו להפיכת הכרטיס</Text>
             </View>
-
-            <View style={styles.statusBox}>
-              <View style={styles.statusDot} />
-              <Text style={styles.statusText}>MEMBER</Text>
-            </View>
-          </View>
-
-          {/* ─── Hero: bold dolphin ─── */}
-          <View style={styles.heroWrap} pointerEvents="none">
-            <Dolphin size={160} opacity={1} gradient />
-          </View>
-
-          {/* ─── Center-left VIP plate ─── */}
-          <View style={styles.vipPlateWrap} pointerEvents="none">
-            <View style={styles.vipPlate}>
-              <Text style={styles.vipPlateText}>VIP</Text>
-            </View>
-          </View>
-
-          {/* ─── Bottom divider line ─── */}
-          <View style={styles.divider} pointerEvents="none" />
-
-          {/* ─── Bottom row: tap hint + app url ─── */}
-          <View style={styles.bottomRow}>
-            <Text style={styles.flipHint}>{interactive ? "↻ לחצו להפיכת הכרטיס" : ""}</Text>
-            <Text style={styles.appUrl}>EILATUSH.APP</Text>
-          </View>
+          ) : null}
         </View>
       </Animated.View>
 
@@ -279,6 +246,43 @@ const styles = StyleSheet.create({
         boxShadow: "0 20px 40px rgba(0,0,0,0.55), 0 0 0 0.5px rgba(212,175,55,0.15)",
       },
     }),
+  },
+
+  // ─── Pre-designed front image fills the entire card ───
+  cardFrontImg: {
+    position: "absolute",
+    top: 0, left: 0, right: 0, bottom: 0,
+    width: "100%",
+    height: "100%",
+    borderRadius: CARD_RADIUS,
+  },
+
+  // Bottom-left flip hint overlay on top of the image
+  flipHintWrap: {
+    position: "absolute",
+    left: 14,
+    bottom: 10,
+    zIndex: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOpacity: 0.6,
+        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 1 },
+      },
+      default: { boxShadow: "0 1px 4px rgba(0,0,0,0.6)" } as any,
+    }),
+  },
+  flipHintOnImg: {
+    color: GOLD,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    opacity: 0.95,
   },
 
   // ─── Hairline gold frames ───
