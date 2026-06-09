@@ -152,19 +152,14 @@ export default function VIPCard({
         ]}
       >
         <View style={[styles.cardInner, styles.backInner]}>
-          {/* Same hairline frame */}
-          <View pointerEvents="none" style={styles.outerHairline} />
-          <View pointerEvents="none" style={styles.innerHairline} />
-
-          <CornerOrn position="tl" />
-          <CornerOrn position="tr" />
-          <CornerOrn position="bl" />
-          <CornerOrn position="br" />
-
-          {/* Dolphin watermark (very subtle) — center */}
-          <View pointerEvents="none" style={styles.watermarkWrap}>
-            <Dolphin size={180} opacity={0.04} gradient={false} />
-          </View>
+          {/* Background image (gold dolphin + gold borders + textured corners) */}
+          <Image
+            source={require("../assets/images/vip-card-back-bg.png")}
+            style={styles.cardBackBgImg}
+            resizeMode="cover"
+          />
+          {/* Dark overlay so the text stays readable above the artwork */}
+          <View pointerEvents="none" style={styles.backDarkOverlay} />
 
           {/* Header strip */}
           <View style={styles.backHeader}>
@@ -439,6 +434,21 @@ const styles = StyleSheet.create({
   backInner: {
     paddingTop: 14,
     paddingBottom: 12,
+  },
+  // Background artwork (gold dolphin + frame)
+  cardBackBgImg: {
+    position: "absolute",
+    top: 0, left: 0, right: 0, bottom: 0,
+    width: "100%",
+    height: "100%",
+    borderRadius: CARD_RADIUS,
+  },
+  // Dark overlay to keep the member info readable above the artwork
+  backDarkOverlay: {
+    position: "absolute",
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderRadius: CARD_RADIUS,
   },
   watermarkWrap: {
     position: "absolute",
