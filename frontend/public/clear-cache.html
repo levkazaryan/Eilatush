@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>Refreshing Eilatush…</title>
+  <style>
+    html, body {
+      margin: 0; padding: 0; height: 100%;
+      background: #F6F8FB;
+      font-family: system-ui, -apple-system, "Helvetica Neue", Heebo, Arial, sans-serif;
+      color: #0F172A;
+      display: flex; align-items: center; justify-content: center;
+      text-align: center;
+    }
+    .card {
+      max-width: 360px; padding: 28px 24px; background: #fff;
+      border-radius: 20px; box-shadow: 0 10px 40px rgba(15,23,42,0.08);
+    }
+    h1 { font-size: 20px; margin: 8px 0 6px; font-weight: 800; color: #E63946; }
+    p { font-size: 14px; color: #475569; line-height: 1.5; margin: 8px 0; }
+    .spin {
+      width: 36px; height: 36px; margin: 0 auto 8px;
+      border: 3px solid #E63946; border-top-color: transparent;
+      border-radius: 50%; animation: r 0.9s linear infinite;
+    }
+    @keyframes r { to { transform: rotate(360deg); } }
+    .done { color: #22C55E; font-weight: 700; }
+    a { color: #E63946; text-decoration: none; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="spin" id="spin"></div>
+    <h1>🐬 Eilatush · רענון</h1>
+    <p id="status">Clearing cache and updating to the latest version…</p>
+    <p style="font-size:12px;color:#94A3B8;margin-top:14px">
+      This page wipes the service worker cache so you always get the freshest build.
+    </p>
+  </div>
+
+  <script>
+    (async function () {
+      var statusEl = document.getElementById('status');
+      var spinEl = document.getElementById('spin');
+
+      try {
+        // 1. Unregister every service worker on this origin
+        if ('serviceWorker' in navigator) {
+          var regs = await navigator.serviceWorker.getRegistrations();
+          for (var i = 0; i < regs.length; i++) {
+            try { await regs[i].unregister(); } catch (e) {}
+          }
+        }
+        // 2. Delete every cache storage entry
+        if ('caches' in window) {
+          var keys = await caches.keys();
+          await Promise.all(keys.map(function (k) { return caches.delete(k); }));
+        }
+        // 3. Clear localStorage flags that might pin a stale state (keep auth token if any)
+        try {
+          var keep = ['eilatush_vip_token', 'eilatush_pwa_installed'];
+          var snapshot = {};
+          keep.forEach(function (k) { snapshot[k] = localStorage.getItem(k); });
+          localStorage.clear();
+          keep.forEach(function (k) {
+            if (snapshot[k] !== null) localStorage.setItem(k, snapshot[k]);
+          });
+        } catch (e) {}
+
+        statusEl.innerHTML = '<span class="done">✓ Done!</span> Loading the latest Eilatush…';
+        spinEl.style.borderColor = '#22C55E';
+        spinEl.style.borderTopColor = 'transparent';
+
+        // 4. Hard redirect to home with cache-bust query
+        setTimeout(function () {
+          window.location.replace('/?_fresh=' + Date.now());
+        }, 700);
+      } catch (err) {
+        statusEl.innerHTML =
+          'Couldn\'t auto-clear. <a href="/?_fresh=' + Date.now() + '">Tap here to continue</a>.';
+        spinEl.style.display = 'none';
+        console.error(err);
+      }
+    })();
+  </script>
+</body>
+</html>
