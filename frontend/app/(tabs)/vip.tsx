@@ -123,7 +123,7 @@ export default function VIPTabScreen() {
             testID="vip-claim-cta"
           >
             <Ionicons name="sparkles" size={20} color="#000" />
-            <Text style={styles.ctaBigText}>אני רוצה לקבל את הכרטיס שלי בחינם</Text>
+            <Text style={styles.ctaBigText}>לקבל את הכרטיס חינם</Text>
           </Pressable>
 
           <Pressable
