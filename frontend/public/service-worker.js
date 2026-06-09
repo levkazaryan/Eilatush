@@ -14,7 +14,7 @@
  *   This is automatically done on every web deploy (see web-build script).
  */
 
-const CACHE_VERSION = "eilatush-v4-vip-card-text-2026-06-09";
+const CACHE_VERSION = "eilatush-v5-swr-2026-06-09";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const API_CACHE = `${CACHE_VERSION}-api`;
 const IMAGE_CACHE = `${CACHE_VERSION}-img`;
@@ -87,14 +87,16 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Static assets (JS / CSS / fonts) → cache-first
+  // Static assets (JS / CSS / fonts) → stale-while-revalidate
+  // (serve cached for instant load, but always fetch fresh in the background so
+  //  the next visit has the latest bundle)
   if (
     req.destination === "script" ||
     req.destination === "style" ||
     req.destination === "font" ||
     /\.(js|css|woff2?|ttf|otf)$/i.test(url.pathname)
   ) {
-    event.respondWith(cacheFirst(req, STATIC_CACHE));
+    event.respondWith(staleWhileRevalidate(req, STATIC_CACHE));
     return;
   }
 
