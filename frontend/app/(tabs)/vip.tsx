@@ -154,6 +154,17 @@ export default function VIPTabScreen() {
             <Text style={styles.eyebrow}>שלום, {member.full_name.split(" ")[0]} 👋</Text>
             <Text style={styles.h2}>הכרטיס הדיגיטלי שלכם</Text>
           </View>
+          {member.is_admin ? (
+            <Pressable
+              onPress={() => router.push("/vip-admin")}
+              style={({ pressed }) => [styles.adminBtn, pressed && { opacity: 0.8 }]}
+              accessibilityLabel="פאנל ניהול"
+              testID="vip-admin-btn"
+            >
+              <Ionicons name="shield-checkmark" size={16} color="#fff" />
+              <Text style={styles.adminBtnText}>ניהול</Text>
+            </Pressable>
+          ) : null}
           <Pressable
             onPress={logout}
             style={({ pressed }) => [styles.iconBtnGhost, pressed && { opacity: 0.6 }]}
@@ -327,5 +338,20 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.card,
     borderWidth: 1,
     borderColor: COLORS.border,
+  },
+  adminBtn: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: COLORS.primary,
+    marginEnd: 8,
+  },
+  adminBtnText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "800",
   },
 });

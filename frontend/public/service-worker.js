@@ -14,7 +14,7 @@
  *   This is automatically done on every web deploy (see web-build script).
  */
 
-const CACHE_VERSION = "eilatush-v14-cta-2026-06-09";
+const CACHE_VERSION = "eilatush-v15-admin-panel-2026-06-09";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const API_CACHE = `${CACHE_VERSION}-api`;
 const IMAGE_CACHE = `${CACHE_VERSION}-img`;

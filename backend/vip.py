@@ -133,6 +133,9 @@ class MemberOut(BaseModel):
     join_date: str  # ISO date
     expiry_date: str  # ISO date
     is_active: bool = True
+    is_admin: bool = False
+    last_login: Optional[str] = None  # ISO datetime
+    created_at: Optional[str] = None  # ISO datetime
 
 
 class AuthResponse(BaseModel):
@@ -210,6 +213,13 @@ def _extract_bearer(authorization: Optional[str]) -> str:
 # Helpers
 # ============================================================
 def _doc_to_member_out(doc: Dict[str, Any]) -> MemberOut:
+    def _iso_datetime(v: Any) -> Optional[str]:
+        if v is None:
+            return None
+        if isinstance(v, datetime):
+            return v.replace(tzinfo=v.tzinfo or timezone.utc).isoformat()
+        return str(v)
+
     return MemberOut(
         id=doc["id"],
         full_name=doc["full_name"],
@@ -223,6 +233,9 @@ def _doc_to_member_out(doc: Dict[str, Any]) -> MemberOut:
         join_date=doc["join_date"].date().isoformat() if isinstance(doc["join_date"], datetime) else str(doc["join_date"]),
         expiry_date=doc["expiry_date"].date().isoformat() if isinstance(doc["expiry_date"], datetime) else str(doc["expiry_date"]),
         is_active=bool(doc.get("is_active", True)),
+        is_admin=bool(doc.get("is_admin", False)),
+        last_login=_iso_datetime(doc.get("last_login")),
+        created_at=_iso_datetime(doc.get("created_at")),
     )
 
 
@@ -366,6 +379,62 @@ async def init_vip_collections(db) -> None:
             upsert=True,
         )
 
+    # Seed the default admin (idempotent)
+    await _seed_admin_member(db)
+
+
+async def _seed_admin_member(db) -> None:
+    """Create the initial admin member if missing; idempotent. Also re-flags as admin if exists."""
+    ADMIN_FULL_NAME = "לב קזריאן"
+    ADMIN_EMAIL = "email@levkazaryan.com"
+    ADMIN_PHONE_RAW = "0535319943"
+    ADMIN_DOB = date(1994, 5, 27)
+    ADMIN_ADDRESS = "החשמונאים 9, דירה 18, אילת"
+
+    try:
+        phone_e164 = normalize_il_phone(ADMIN_PHONE_RAW)
+    except Exception:
+        return
+
+    existing = await db.vip_members.find_one({"phone": phone_e164})
+    if existing:
+        # Make sure this account is flagged as admin
+        if not existing.get("is_admin"):
+            await db.vip_members.update_one(
+                {"id": existing["id"]},
+                {"$set": {"is_admin": True}},
+            )
+        return
+
+    # Create from scratch
+    member_number = await _next_member_number(db)
+    now = datetime.now(timezone.utc)
+    dob_dt = datetime(ADMIN_DOB.year, ADMIN_DOB.month, ADMIN_DOB.day, tzinfo=timezone.utc)
+    expiry = now + timedelta(days=FREE_MEMBERSHIP_MONTHS * 30)
+    secret = _make_auth_secret(phone_e164, ADMIN_DOB)
+    auth_hash = _hash_secret(secret)
+
+    doc = {
+        "id": str(uuid.uuid4()),
+        "full_name": ADMIN_FULL_NAME,
+        "email": ADMIN_EMAIL.lower(),
+        "phone": phone_e164,
+        "dob": dob_dt,
+        "address": ADMIN_ADDRESS,
+        "member_number": member_number,
+        "join_date": now,
+        "expiry_date": expiry,
+        "auth_secret_hash": auth_hash,
+        "is_active": True,
+        "is_admin": True,
+        "created_at": now,
+    }
+    try:
+        await db.vip_members.insert_one(doc)
+    except Exception:
+        # Race with another worker — ignore
+        pass
+
 
 async def _next_member_number(db) -> str:
     """Reserve & return the next member number atomically."""
@@ -474,6 +543,16 @@ def build_vip_router(db) -> APIRouter:
         if not doc.get("is_active", True):
             raise HTTPException(status_code=403, detail="חשבון לא פעיל")
 
+        # update last_login (best-effort, non-blocking on error)
+        try:
+            await db.vip_members.update_one(
+                {"id": doc["id"]},
+                {"$set": {"last_login": datetime.now(timezone.utc)}},
+            )
+            doc["last_login"] = datetime.now(timezone.utc)
+        except Exception:
+            pass
+
         token = _create_token(doc["id"])
         return AuthResponse(token=token, member=_doc_to_member_out(doc))
 
@@ -512,5 +591,104 @@ def build_vip_router(db) -> APIRouter:
         """Public endpoint — number of available discounts for landing copy."""
         cnt = await db.vip_discounts.count_documents({"active": True})
         return {"discount_count": cnt}
+
+    # ============================================================
+    # ADMIN ENDPOINTS
+    # ============================================================
+    async def _require_admin(authorization: Optional[str]) -> Dict[str, Any]:
+        doc = await _get_current_member(authorization)
+        if not doc.get("is_admin"):
+            raise HTTPException(status_code=403, detail="הרשאות מנהל נדרשות")
+        return doc
+
+    # ---------- ADMIN: LIST MEMBERS ----------
+    @router.get("/admin/members")
+    async def admin_list_members(
+        authorization: Optional[str] = Header(default=None),
+        q: Optional[str] = None,
+        status: Optional[str] = "all",  # all | active | inactive
+        limit: int = 200,
+        skip: int = 0,
+    ):
+        await _require_admin(authorization)
+
+        filt: Dict[str, Any] = {}
+        if status == "active":
+            filt["is_active"] = True
+        elif status == "inactive":
+            filt["is_active"] = False
+
+        if q and q.strip():
+            term = q.strip()
+            # Try to normalize a phone search; fall back to raw
+            phone_norm = None
+            try:
+                phone_norm = normalize_il_phone(term)
+            except Exception:
+                phone_norm = None
+
+            or_conditions: List[Dict[str, Any]] = [
+                {"full_name": {"$regex": re.escape(term), "$options": "i"}},
+                {"email": {"$regex": re.escape(term), "$options": "i"}},
+                {"member_number": {"$regex": re.escape(term), "$options": "i"}},
+            ]
+            if phone_norm:
+                or_conditions.append({"phone": phone_norm})
+            else:
+                # Allow partial phone match (e.g. last 4 digits)
+                digits_only = re.sub(r"\D", "", term)
+                if digits_only:
+                    or_conditions.append({"phone": {"$regex": re.escape(digits_only), "$options": "i"}})
+            filt["$or"] = or_conditions
+
+        total = await db.vip_members.count_documents(filt)
+        cursor = (
+            db.vip_members.find(filt)
+            .sort("created_at", -1)
+            .skip(max(0, skip))
+            .limit(min(max(1, limit), 500))
+        )
+        items: List[MemberOut] = []
+        async for d in cursor:
+            d.pop("_id", None)
+            items.append(_doc_to_member_out(d))
+        return {"total": total, "items": [i.model_dump() for i in items]}
+
+    # ---------- ADMIN: STATS ----------
+    @router.get("/admin/stats")
+    async def admin_stats(authorization: Optional[str] = Header(default=None)):
+        await _require_admin(authorization)
+        total = await db.vip_members.count_documents({})
+        active = await db.vip_members.count_documents({"is_active": True})
+        inactive = await db.vip_members.count_documents({"is_active": False})
+        week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+        this_week = await db.vip_members.count_documents({"created_at": {"$gte": week_ago}})
+        return {
+            "total": total,
+            "active": active,
+            "inactive": inactive,
+            "new_this_week": this_week,
+        }
+
+    # ---------- ADMIN: TOGGLE ACTIVE ----------
+    @router.post("/admin/members/{member_id}/toggle-active")
+    async def admin_toggle_active(
+        member_id: str,
+        authorization: Optional[str] = Header(default=None),
+    ):
+        admin_doc = await _require_admin(authorization)
+        if member_id == admin_doc.get("id"):
+            raise HTTPException(status_code=400, detail="אי אפשר להשבית את חשבון המנהל שלך")
+        target = await db.vip_members.find_one({"id": member_id})
+        if not target:
+            raise HTTPException(status_code=404, detail="חבר לא נמצא")
+        new_active = not bool(target.get("is_active", True))
+        await db.vip_members.update_one(
+            {"id": member_id},
+            {"$set": {"is_active": new_active}},
+        )
+        updated = await db.vip_members.find_one({"id": member_id})
+        updated.pop("_id", None)
+        return {"member": _doc_to_member_out(updated).model_dump()}
 
     return router

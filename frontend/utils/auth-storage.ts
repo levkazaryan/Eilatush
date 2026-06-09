@@ -16,6 +16,9 @@ export type VIPMember = {
   join_date: string;
   expiry_date: string;
   is_active: boolean;
+  is_admin?: boolean;
+  last_login?: string | null;
+  created_at?: string | null;
 };
 
 export async function saveAuth(token: string, member: VIPMember) {

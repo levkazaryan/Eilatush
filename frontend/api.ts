@@ -466,6 +466,9 @@ export type VIPMember = {
   join_date: string;
   expiry_date: string;
   is_active: boolean;
+  is_admin?: boolean;
+  last_login?: string | null;
+  created_at?: string | null;
 };
 
 export type VIPDiscount = {
@@ -528,5 +531,27 @@ export const vipApi = {
   },
   async discounts(token: string): Promise<VIPDiscount[]> {
     return vipFetch("/discounts", { method: "GET" }, token);
+  },
+
+  // ===== Admin endpoints (require token of an is_admin member) =====
+  async adminListMembers(
+    token: string,
+    opts: { q?: string; status?: "all" | "active" | "inactive"; limit?: number; skip?: number } = {}
+  ): Promise<{ total: number; items: VIPMember[] }> {
+    const qs = new URLSearchParams();
+    if (opts.q) qs.set("q", opts.q);
+    if (opts.status) qs.set("status", opts.status);
+    if (opts.limit != null) qs.set("limit", String(opts.limit));
+    if (opts.skip != null) qs.set("skip", String(opts.skip));
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return vipFetch(`/admin/members${suffix}`, { method: "GET" }, token);
+  },
+  async adminStats(
+    token: string
+  ): Promise<{ total: number; active: number; inactive: number; new_this_week: number }> {
+    return vipFetch("/admin/stats", { method: "GET" }, token);
+  },
+  async adminToggleActive(token: string, memberId: string): Promise<{ member: VIPMember }> {
+    return vipFetch(`/admin/members/${memberId}/toggle-active`, { method: "POST" }, token);
   },
 };
