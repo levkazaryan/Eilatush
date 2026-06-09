@@ -103,18 +103,18 @@ export default function VIPTabScreen() {
               </View>
               <View style={styles.bullet}>
                 <Text style={styles.bulletNum}>🆕</Text>
-                <Text style={styles.bulletText}>כל שבוע {"\n"}מתווספות חדשות</Text>
+                <Text style={styles.bulletText}>כל שבוע {"\n"}מתווספות הטבות חדשות</Text>
               </View>
               <View style={styles.bullet}>
                 <Text style={styles.bulletNum}>🎁</Text>
-                <Text style={styles.bulletText}>{teaserCount} הטבות {"\n"}מחכות לכם</Text>
+                <Text style={styles.bulletText}>{teaserCount} מתנות {"\n"}מחכות לכם</Text>
               </View>
             </View>
           </View>
 
           <View style={styles.freeBox}>
-            <Text style={styles.freeBoxTitle}>חצי שנה במתנה — בלי שום עלות</Text>
-            <Text style={styles.freeBoxText}>בלי כרטיס אשראי · בלי התחייבות · אפשר לבטל מתי שרוצים</Text>
+            <Text style={styles.freeBoxTitle}>חצי שנה במתנה — חינם לגמרי!</Text>
+            <Text style={styles.freeBoxText}>בלי כרטיס אשראי · בלי התחייבות</Text>
           </View>
 
           <Pressable
@@ -123,7 +123,7 @@ export default function VIPTabScreen() {
             testID="vip-claim-cta"
           >
             <Ionicons name="sparkles" size={20} color="#000" />
-            <Text style={styles.ctaBigText}>אני רוצה את הכרטיס שלי — בחינם</Text>
+            <Text style={styles.ctaBigText}>אני רוצה לקבל את הכרטיס שלי בחינם</Text>
           </Pressable>
 
           <Pressable
