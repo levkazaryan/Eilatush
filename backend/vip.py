@@ -275,7 +275,7 @@ ICEMALL_DISCOUNTS_SEED = [
         "gift_text": "ספא דגים 10 דקות בחינם",
         "age_restriction": "18+",
         "category": "ספא ויופי",
-        "image_url": "https://customer-assets.emergentagent.com/job_eilat-connect/artifacts/c900zc88_pr_1.jpg",
+        "image_url": "https://customer-assets.emergentagent.com/job_eilat-connect/artifacts/ys9kkal4_IMG_20260610_214048.jpg",
         "order": 1,
     },
     {
@@ -285,7 +285,7 @@ ICEMALL_DISCOUNTS_SEED = [
         "gift_text": "עיסוי רגליים מפנק בחינם",
         "age_restriction": "18+",
         "category": "ספא ויופי",
-        "image_url": "https://customer-assets.emergentagent.com/job_eilat-connect/artifacts/qw27of39_pr_2.jpg",
+        "image_url": "https://customer-assets.emergentagent.com/job_eilat-connect/artifacts/mfc5uc9q_IMG_20260610_214106.jpg",
         "order": 2,
     },
     {
@@ -295,7 +295,7 @@ ICEMALL_DISCOUNTS_SEED = [
         "gift_text": "מגנט ממותג לרכב בחינם",
         "age_restriction": "18+",
         "category": "אקססוריז",
-        "image_url": "https://customer-assets.emergentagent.com/job_eilat-connect/artifacts/vegx8bt6_pr_3.jpg",
+        "image_url": "https://customer-assets.emergentagent.com/job_eilat-connect/artifacts/oje9h6wn_IMG_20260610_214135.jpg",
         "order": 3,
     },
     {
@@ -305,7 +305,7 @@ ICEMALL_DISCOUNTS_SEED = [
         "gift_text": "ניקוי וחידוש תכשיט יוקרה בחינם",
         "age_restriction": "18+",
         "category": "תכשיטים",
-        "image_url": "https://customer-assets.emergentagent.com/job_eilat-connect/artifacts/1o6d3165_pr_4.jpg",
+        "image_url": "https://customer-assets.emergentagent.com/job_eilat-connect/artifacts/5u5i00u6_IMG_20260610_214156.jpg",
         "order": 4,
     },
     {
