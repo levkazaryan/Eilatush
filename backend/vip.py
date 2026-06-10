@@ -315,7 +315,7 @@ ICEMALL_DISCOUNTS_SEED = [
         "gift_text": "עץ ריח בחינם",
         "age_restriction": "18+",
         "category": "אקססוריז",
-        "image_url": "https://customer-assets.emergentagent.com/job_eilat-connect/artifacts/puck3cry_pr_5.jpg",
+        "image_url": "https://customer-assets.emergentagent.com/job_eilat-connect/artifacts/trvdsldc_IMG_20260610_214230.jpg",
         "order": 5,
     },
     {
@@ -325,7 +325,7 @@ ICEMALL_DISCOUNTS_SEED = [
         "gift_text": "כוס לימונדה בגודל מיוחד בחינם",
         "age_restriction": "18+",
         "category": "בית קפה",
-        "image_url": "https://customer-assets.emergentagent.com/job_eilat-connect/artifacts/g9h6tbqh_pr_6.jpg",
+        "image_url": "https://customer-assets.emergentagent.com/job_eilat-connect/artifacts/07aa1wcs_IMG_20260610_214241.jpg",
         "order": 6,
     },
     {
@@ -335,7 +335,7 @@ ICEMALL_DISCOUNTS_SEED = [
         "gift_text": "4 כנפי עוף בחינם",
         "age_restriction": "18+",
         "category": "מסעדה",
-        "image_url": "https://customer-assets.emergentagent.com/job_eilat-connect/artifacts/fo00sw88_pr_7.jpg",
+        "image_url": "https://customer-assets.emergentagent.com/job_eilat-connect/artifacts/ur7u8efe_IMG_20260610_214301.jpg",
         "order": 7,
     },
     {
@@ -345,7 +345,7 @@ ICEMALL_DISCOUNTS_SEED = [
         "gift_text": "טיפול עיניים ודוגמית קרם פנים בחינם",
         "age_restriction": "18+",
         "category": "קוסמטיקה",
-        "image_url": "https://customer-assets.emergentagent.com/job_eilat-connect/artifacts/n3a2t2hn_pr_8.jpg",
+        "image_url": "https://customer-assets.emergentagent.com/job_eilat-connect/artifacts/glejjwch_IMG_20260610_214335.jpg",
         "order": 8,
     },
 ]
