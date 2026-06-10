@@ -28,7 +28,8 @@ function toIsoDate(d: string): string | null {
 
 export default function VIPRegisterScreen() {
   const { register } = useAuth();
-  const [fullName, setFullName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [dob, setDob] = useState("");
@@ -38,7 +39,8 @@ export default function VIPRegisterScreen() {
 
   const handleSubmit = async () => {
     setErr(null);
-    if (!fullName.trim()) return setErr("הכניסו שם מלא");
+    if (!firstName.trim()) return setErr("הכניסו שם פרטי");
+    if (!lastName.trim()) return setErr("הכניסו שם משפחה");
     if (!email.trim() || !email.includes("@")) return setErr("כתובת אימייל לא תקינה");
     if (!phone.trim()) return setErr("הכניסו מספר טלפון");
     if (!dob || !/^\d{4}-\d{2}-\d{2}$/.test(dob)) return setErr("בחרו תאריך לידה");
@@ -47,7 +49,7 @@ export default function VIPRegisterScreen() {
     setBusy(true);
     try {
       await register({
-        full_name: fullName.trim(),
+        full_name: `${firstName.trim()} ${lastName.trim()}`,
         email: email.trim().toLowerCase(),
         phone: phone.trim(),
         dob: dob,
@@ -76,7 +78,14 @@ export default function VIPRegisterScreen() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text style={styles.intro}>מילוי קצר — והכרטיס שלכם מוכן {"\u00B7"} ללא עלות וללא מחויבות</Text>
 
-          <Field label="שם מלא" value={fullName} onChange={setFullName} placeholder="לדוגמה: דניאל לוי" autoCapitalize="words" testID="vip-name" />
+          <View style={styles.nameRow}>
+            <View style={{ flex: 1 }}>
+              <Field label="שם פרטי" value={firstName} onChange={setFirstName} placeholder="לדוגמה: דניאל" autoCapitalize="words" testID="vip-first-name" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Field label="שם משפחה" value={lastName} onChange={setLastName} placeholder="לדוגמה: לוי" autoCapitalize="words" testID="vip-last-name" />
+            </View>
+          </View>
           <Field label="אימייל" value={email} onChange={setEmail} placeholder="you@example.com" keyboardType="email-address" autoCapitalize="none" testID="vip-email" />
           <Field label="טלפון (ישראלי)" value={phone} onChange={setPhone} placeholder="050-1234567" keyboardType="phone-pad" testID="vip-phone" />
           <DOBPicker label="תאריך לידה" value={dob} onChange={setDob} testID="vip-dob" />
@@ -157,6 +166,7 @@ const styles = StyleSheet.create({
   headerTitle: { flex: 1, fontSize: 18, fontWeight: "900", color: COLORS.textPrimary, textAlign: "center" },
   scroll: { padding: SPACING.md },
   intro: { fontSize: 14, color: COLORS.textSecondary, textAlign: "center", marginBottom: 18 },
+  nameRow: { flexDirection: "row", gap: 10 },
   fieldGroup: { marginBottom: 14 },
   fieldLabel: { fontSize: 13, fontWeight: "800", color: COLORS.textPrimary, marginBottom: 6, textAlign: "right" },
   input: {
