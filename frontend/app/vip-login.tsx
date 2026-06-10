@@ -10,6 +10,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { COLORS, RADIUS, SPACING } from "../theme";
 import { useAuth } from "../utils/auth-context";
+import DOBPicker from "../components/DOBPicker";
 
 function toIsoDate(d: string): string | null {
   const s = d.trim();
@@ -33,11 +34,10 @@ export default function VIPLoginScreen() {
   const handleSubmit = async () => {
     setErr(null);
     if (!phone.trim()) return setErr("הכניסו מספר טלפון");
-    const dobIso = toIsoDate(dob);
-    if (!dobIso) return setErr("תאריך לידה בפורמט DD/MM/YYYY");
+    if (!dob || !/^\d{4}-\d{2}-\d{2}$/.test(dob)) return setErr("בחרו תאריך לידה");
     setBusy(true);
     try {
-      await login({ phone: phone.trim(), dob: dobIso });
+      await login({ phone: phone.trim(), dob: dob });
       router.replace("/(tabs)/vip");
     } catch (e: any) {
       setErr(e?.message || "התחברות נכשלה");
@@ -77,16 +77,7 @@ export default function VIPLoginScreen() {
           </View>
 
           <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>תאריך לידה (DD/MM/YYYY)</Text>
-            <TextInput
-              value={dob}
-              onChangeText={setDob}
-              placeholder="15/05/1990"
-              placeholderTextColor={COLORS.textMuted}
-              keyboardType="numbers-and-punctuation"
-              style={styles.input}
-              testID="vip-login-dob"
-            />
+            <DOBPicker label="תאריך לידה" value={dob} onChange={setDob} testID="vip-login-dob" />
           </View>
 
           {err ? <Text style={styles.errText}>{err}</Text> : null}

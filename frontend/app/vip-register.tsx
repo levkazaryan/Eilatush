@@ -10,6 +10,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { COLORS, RADIUS, SPACING } from "../theme";
 import { useAuth } from "../utils/auth-context";
+import DOBPicker from "../components/DOBPicker";
 
 function toIsoDate(d: string): string | null {
   // Accepts DD/MM/YYYY or YYYY-MM-DD
@@ -40,8 +41,7 @@ export default function VIPRegisterScreen() {
     if (!fullName.trim()) return setErr("הכניסו שם מלא");
     if (!email.trim() || !email.includes("@")) return setErr("כתובת אימייל לא תקינה");
     if (!phone.trim()) return setErr("הכניסו מספר טלפון");
-    const dobIso = toIsoDate(dob);
-    if (!dobIso) return setErr("תאריך לידה בפורמט DD/MM/YYYY");
+    if (!dob || !/^\d{4}-\d{2}-\d{2}$/.test(dob)) return setErr("בחרו תאריך לידה");
     if (!address.trim()) return setErr("הכניסו כתובת");
 
     setBusy(true);
@@ -50,7 +50,7 @@ export default function VIPRegisterScreen() {
         full_name: fullName.trim(),
         email: email.trim().toLowerCase(),
         phone: phone.trim(),
-        dob: dobIso,
+        dob: dob,
         address: address.trim(),
       });
       router.replace("/(tabs)/vip");
@@ -79,7 +79,7 @@ export default function VIPRegisterScreen() {
           <Field label="שם מלא" value={fullName} onChange={setFullName} placeholder="לדוגמה: דניאל לוי" autoCapitalize="words" testID="vip-name" />
           <Field label="אימייל" value={email} onChange={setEmail} placeholder="you@example.com" keyboardType="email-address" autoCapitalize="none" testID="vip-email" />
           <Field label="טלפון (ישראלי)" value={phone} onChange={setPhone} placeholder="050-1234567" keyboardType="phone-pad" testID="vip-phone" />
-          <Field label="תאריך לידה (DD/MM/YYYY)" value={dob} onChange={setDob} placeholder="15/05/1990" keyboardType="numbers-and-punctuation" testID="vip-dob" />
+          <DOBPicker label="תאריך לידה" value={dob} onChange={setDob} testID="vip-dob" />
           <Field label="כתובת באילת" value={address} onChange={setAddress} placeholder="לדוגמה: התמרים 7, אילת" testID="vip-address" />
 
           {err ? <Text style={styles.errText}>{err}</Text> : null}
