@@ -20,7 +20,7 @@ export default function DiscountCard({ item }: { item: VIPDiscount }) {
     <View style={styles.card}>
       <View style={styles.imgWrap}>
         {hasImg ? (
-          <Image source={{ uri: item.image_url! }} style={styles.img} resizeMode="cover" />
+          <Image source={{ uri: item.image_url! }} style={styles.img} resizeMode="contain" />
         ) : (
           <View style={styles.imgFallback}>
             <Text style={styles.imgFallbackEmoji}>{emoji}</Text>
@@ -63,8 +63,8 @@ const styles = StyleSheet.create({
   },
   imgWrap: {
     width: "100%",
-    aspectRatio: 16 / 9,
-    backgroundColor: "#EFEFEF",
+    aspectRatio: 4 / 3,
+    backgroundColor: "#FFFFFF",
     position: "relative",
   },
   img: { width: "100%", height: "100%" },
