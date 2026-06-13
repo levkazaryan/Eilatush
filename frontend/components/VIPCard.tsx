@@ -225,9 +225,11 @@ const styles = StyleSheet.create({
     borderRadius: CARD_RADIUS,
     backgroundColor: INK,
     overflow: "hidden",
-    paddingTop: 18,
-    paddingHorizontal: 18,
-    paddingBottom: 14,
+    // NOTE: NO padding here. Padding was previously visible as a thin frame
+    // around the background image on some platforms because an
+    // absolutely-positioned <Image top:0,left:0,right:0,bottom:0> child can
+    // be inset by the parent's padding box. Padding now lives on the inner
+    // text content of the back face (`backHeader`/etc.) instead.
     ...Platform.select({
       ios: {
         shadowColor: "#000",
@@ -433,6 +435,7 @@ const styles = StyleSheet.create({
   // ─── BACK ───
   backInner: {
     paddingTop: 14,
+    paddingHorizontal: 18,
     paddingBottom: 12,
   },
   // Background artwork (gold dolphin + frame)
