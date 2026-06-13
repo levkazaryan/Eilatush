@@ -1,0 +1,54 @@
+# Apache / cPanel rewrite rules for the Eilatush PWA
+# ---------------------------------------------------
+# Drop this file into the directory where you uploaded `/dist/*` on your host.
+# Equivalent to the Netlify/Cloudflare `_redirects` file.
+
+# ── Force HTTPS (recommended) ───────────────────────────────────────────
+RewriteEngine On
+RewriteCond %{HTTPS} off
+RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# ── Service worker MUST never be cached itself ─────────────────────────
+<FilesMatch "^service-worker\.js$">
+  Header set Cache-Control "no-cache, no-store, must-revalidate"
+  Header set Service-Worker-Allowed "/"
+</FilesMatch>
+
+# ── Long-cache for static, versioned assets ────────────────────────────
+<FilesMatch "\.(woff2|woff|ttf|otf|eot|js|css|jpg|jpeg|png|webp|svg|ico)$">
+  Header set Cache-Control "public, max-age=2592000"
+</FilesMatch>
+
+# ── Hashed Expo bundles (in /_expo/) are immutable ─────────────────────
+<IfModule mod_rewrite.c>
+  RewriteCond %{REQUEST_URI} ^/_expo/static/
+  RewriteRule .* - [E=IMMUTABLE:1]
+  Header set Cache-Control "public, max-age=31536000, immutable" env=IMMUTABLE
+</IfModule>
+
+# ── Dynamic routes — /business/:id → /business/[id].html ───────────────
+RewriteRule ^business/([^/]+)/?$ /business/[id].html [L]
+RewriteRule ^article/([^/]+)/?$ /article/[id].html  [L]
+RewriteRule ^job/([^/]+)/?$     /job/[id].html      [L]
+
+# ── Clean URLs — /businesses → /businesses.html ────────────────────────
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME}.html -f
+RewriteRule ^(.*)$ $1.html [L]
+
+# ── SPA fallback: anything else serves index.html ──────────────────────
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.html [L]
+
+# ── Proper MIME types for PWA files ────────────────────────────────────
+AddType application/manifest+json .webmanifest
+AddType application/javascript .js
+
+# ── Security headers ───────────────────────────────────────────────────
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+  Header set Referrer-Policy "strict-origin-when-cross-origin"
+  Header set X-Frame-Options "SAMEORIGIN"
+</IfModule>

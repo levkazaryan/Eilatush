@@ -1,0 +1,43 @@
+{
+  "name": "אילתוש — כל מה שקורה באילת",
+  "short_name": "אילתוש 🐬",
+  "description": "אילתוש מרכזת במקום אחד את כל המידע על אילת: אירועים, עסקים, חדשות, משרות ועוזרת AI חכמה.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0172E5",
+  "theme_color": "#0172E5",
+  "lang": "he",
+  "dir": "rtl",
+  "categories": ["travel", "lifestyle", "news"],
+  "icons": [
+    { "src": "/icon-72.png",  "sizes": "72x72",   "type": "image/png", "purpose": "any" },
+    { "src": "/icon-96.png",  "sizes": "96x96",   "type": "image/png", "purpose": "any" },
+    { "src": "/icon-128.png", "sizes": "128x128", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-144.png", "sizes": "144x144", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-152.png", "sizes": "152x152", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-256.png", "sizes": "256x256", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-384.png", "sizes": "384x384", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "מה קורה עכשיו",
+      "short_name": "עכשיו",
+      "description": "אירועים פעילים בעיר כרגע",
+      "url": "/?tab=now",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "צ׳אט אילתוש",
+      "short_name": "AI",
+      "description": "שאל את אילתוש כל שאלה על העיר",
+      "url": "/eilatush",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

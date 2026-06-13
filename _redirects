@@ -1,0 +1,32 @@
+# Cloudflare Pages / Netlify rewrite rules for the Eilatush PWA
+# ---------------------------------------------------------------
+# This file is auto-detected by Netlify and Cloudflare Pages (they share
+# the same `_redirects` format).  It serves three purposes:
+#
+#  1. Map clean URLs to their static HTML files (e.g. /sources → /sources.html)
+#  2. Provide an SPA fallback for dynamic routes (e.g. /business/abc123)
+#  3. Ensure the service worker is never proxied through a cache
+#
+# Order matters — more specific rules come first.
+
+# ── 1) Asset shortcuts (no rewrite, just cache hints) ────────────────────
+# (Handled by `_headers` file below)
+
+# ── 2) Dynamic routes: /business/:id, /article/:id, /job/:id ─────────────
+# Expo Router exports a generic [id].html for each, so map any sub-path
+# to the corresponding template.  This is essentially an SPA fallback.
+/business/*    /business/[id].html    200
+/article/*     /article/[id].html     200
+/job/*         /job/[id].html         200
+
+# ── 3) Tab routes — Expo Router exports both /tab and /(tabs)/tab .html ───
+/                   /index.html         200
+/eilatush           /eilatush.html      200
+/businesses         /businesses.html    200
+/news               /news.html          200
+/jobs               /jobs.html          200
+/sources            /sources.html       200
+
+# ── 4) Final SPA fallback — anything unknown serves index.html ───────────
+# This lets client-side routing handle any unforeseen path.
+/*                  /index.html         200
