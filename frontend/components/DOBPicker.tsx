@@ -265,7 +265,11 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     paddingTop: 12,
     paddingBottom: Platform.OS === "ios" ? 32 : 18,
-    maxHeight: "75%",
+    // Use a DEFINITE height (not maxHeight) so the inner ScrollView can
+    // resolve a non-zero flex height and actually scroll. With maxHeight
+    // the sheet collapsed to content height and the ScrollView (which has
+    // no intrinsic height) clipped overflowing items instead of scrolling.
+    height: "75%",
   },
   sheetHeader: {
     flexDirection: "row-reverse",
@@ -288,6 +292,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F1F5F9",
   },
   list: {
+    flex: 1,
     paddingHorizontal: 12,
   },
   option: {
